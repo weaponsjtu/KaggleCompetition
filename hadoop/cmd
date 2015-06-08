@@ -1,0 +1,20 @@
+# local run
+cat <input path> | python <path to mapper script> | sort -t $'\t' -k1,1 | python <path to reducer script> > <output path>
+python <path to mapper script> < <input path> | sort -t $'\t' -k1,1 | python <path to reducer script> > <output path>
+
+# hadoop
+$hadoop jar $HADOOP_HOME/contrib/streaming/hadoop-streaming-1.0.4.jar \
+        -mapper 'python mapper.py'   -file mapper.py\
+        -reducer 'python reducer.py'  -file reducer.py \
+        -input input/* -output output
+
+$HADOOP_HOME/bin/hadoop  jar $HADOOP_HOME/hadoop-streaming.jar \
+        -D stream.map.output.field.separator=. \
+        -D stream.num.map.output.key.fields=4 \
+        -D map.output.key.field.separator=. \
+        -D mapred.text.key.partitioner.options=-k1,2 \
+        -input inputDir \
+        -output outputDir \
+        -mapper mapper.py -file mapper.py \
+        -reducer reducer.py -file reducer.py \
+        -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner

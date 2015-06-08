@@ -3,11 +3,14 @@ from operator import itemgetter
 import csv
 
 
-f = open('data/id_all_ip.csv')
+#f = open('data/id_all_ip.csv')
+f = open('data/id_all_property.csv')
 rows = list()
-r = re.compile('(\(\w+,\w+,\w+,\w+,\w+,\w+,\w+\))')
+#r = re.compile('(\(\w+,\w+,\w+,\w+,\w+,\w+,\w+\))')
+r = re.compile('(\(\w+,\w+\))')
 r2 = re.compile(',')
-title = ['id', 'device_or_cookie', 'ips']
+#title = ['id', 'device_or_cookie', 'ips']
+title = ['id', 'device_or_cookie', 'properties']
 
 for t, i in enumerate(f):
     if t == 0:
@@ -15,7 +18,7 @@ for t, i in enumerate(f):
     row = list()
     i = i.strip().split('{')
     row = i[0].split(',')[: -1]
-    if row[1] == '1':
+    if row[1] == '0':
         continue
     ips = r.findall(i[1][: -1])
     s = ''
@@ -28,7 +31,7 @@ for t, i in enumerate(f):
 
 f.close()
 rows = sorted(rows, key=itemgetter(0))
-output = open('data/device_ip.csv', 'wb')
+output = open('data/cookie_property.csv', 'wb')
 open_file_object = csv.writer(output)
 open_file_object.writerow(title)
 open_file_object.writerows(rows)

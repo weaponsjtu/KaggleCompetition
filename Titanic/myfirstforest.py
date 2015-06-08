@@ -4,7 +4,7 @@ Date : 23rd September 2012
 Revised: 15 April 2014
 please see packages.python.org/milk/randomforests.html for more
 
-""" 
+"""
 import pandas as pd
 import numpy as np
 import csv as csv
@@ -37,7 +37,7 @@ if len(train_df.Age[ train_df.Age.isnull() ]) > 0:
     train_df.loc[ (train_df.Age.isnull()), 'Age'] = median_age
 
 # Remove the Name column, Cabin, Ticket, and Sex (since I copied and filled it to Gender)
-train_df = train_df.drop(['Name', 'Sex', 'Ticket', 'Cabin', 'PassengerId'], axis=1) 
+train_df = train_df.drop(['Name', 'Sex', 'Ticket', 'Cabin', 'PassengerId'], axis=1)
 
 
 # TEST DATA
@@ -72,7 +72,7 @@ if len(test_df.Fare[ test_df.Fare.isnull() ]) > 0:
 # Collect the test data's PassengerIds before dropping it
 ids = test_df['PassengerId'].values
 # Remove the Name column, Cabin, Ticket, and Sex (since I copied and filled it to Gender)
-test_df = test_df.drop(['Name', 'Sex', 'Ticket', 'Cabin', 'PassengerId'], axis=1) 
+test_df = test_df.drop(['Name', 'Sex', 'Ticket', 'Cabin', 'PassengerId'], axis=1)
 
 
 # The data is now ready to go. So lets fit to the train, then predict to the test!
