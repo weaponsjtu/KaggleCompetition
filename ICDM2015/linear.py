@@ -1,34 +1,41 @@
 import numpy as np
 import pandas as pd
 
+import time
+
 
 def feature():
     train = pd.read_csv('data/train_ip_property.csv', header=0)
     cookie = pd.read_csv('data/cookie_ip_property.csv', header=0)
     device_cookie = pd.merge( train, cookie, on='drawbridge_handle')
 
-    unique_device_type = np.unique(device_cookie['device_type'])
-    unique_device_os = np.unique(device_cookie['device_os'])
-    unique_country_x = np.unique(device_cookie['country_x'])
-    unique_a_c0_x = np.unique(device_cookie['anonymous_c0_x'])
-    unique_a_c1_x = np.unique(device_cookie['anonymous_c1_x'])
-    unique_a_c2_x = np.unique(device_cookie['anonymous_c2_x'])
-    unique_a_5_x = np.unique(device_cookie['anonymous_5_x'])
-    unique_a_6_x = np.unique(device_cookie['anonymous_6_x'])
-    unique_a_7_x = np.unique(device_cookie['anonymous_7_x'])
+    device_cookie = device_cookie[ list(device_cookie.columns) ].astype(str)
 
-    unique_computer_os_type = np.unique(device_cookie['computer_os_type'])
-    unique_computer_browser_version = np.unique(device_cookie['computer_browser_version'])
-    unique_country_y = np.unique(device_cookie['country_y'])
-    unique_a_c0_y = np.unique(device_cookie['anonymous_c0_y'])
-    unique_a_c1_y = np.unique(device_cookie['anonymous_c1_y'])
-    unique_a_c2_y = np.unique(device_cookie['anonymous_c2_y'])
-    unique_a_5_y = np.unique(device_cookie['anonymous_5_y'])
-    unique_a_6_y = np.unique(device_cookie['anonymous_6_y'])
-    unique_a_7_y = np.unique(device_cookie['anonymous_7_y'])
+    unique_device_type = np.unique(train['device_type'])
+    unique_device_os = np.unique(train['device_os'])
+    unique_country_x = np.unique(train['country'])
+    unique_a_c0_x = np.unique(train['anonymous_c0'])
+    unique_a_c1_x = np.unique(train['anonymous_c1'])
+    unique_a_c2_x = np.unique(train['anonymous_c2'])
+    unique_a_5_x = np.unique(train['anonymous_5'])
+    unique_a_6_x = np.unique(train['anonymous_6'])
+    unique_a_7_x = np.unique(train['anonymous_7'])
+
+    unique_computer_os_type = np.unique(cookie['computer_os_type'])
+    unique_computer_browser_version = np.unique(cookie['computer_browser_version'])
+    unique_country_y = np.unique(cookie['country'])
+    unique_a_c0_y = np.unique(cookie['anonymous_c0'])
+    unique_a_c1_y = np.unique(cookie['anonymous_c1'])
+    unique_a_c2_y = np.unique(cookie['anonymous_c2'])
+    unique_a_5_y = np.unique(cookie['anonymous_5'])
+    unique_a_6_y = np.unique(cookie['anonymous_6'])
+    unique_a_7_y = np.unique(cookie['anonymous_7'])
+
+    #device_cookie['device_type'] = device_cookie['device_type'].map(lambda x: value2vec(x, unique_device_type) )
 
     n = len(device_cookie)
     for i in range(0, n):
+        print i
         device_cookie['device_type'].iat[i] = value2vec( device_cookie['device_type'].iat[i], unique_device_type )
         device_cookie['device_os'].iat[i] = value2vec( device_cookie['device_os'].iat[i], unique_device_os)
         device_cookie['country_x'].iat[i] = value2vec( device_cookie['country_x'].iat[i], unique_country_x )
@@ -49,7 +56,7 @@ def feature():
         device_cookie['anonymous_6_y'].iat[i] = float(device_cookie['anonymous_6_y'].iat[i]) * 1.0 / unique_a_6_y.max()
         device_cookie['anonymous_7_y'].iat[i] = float(device_cookie['anonymous_7_y'].iat[i]) * 1.0 / unique_a_7_y.max()
 
-    device_cookie.to_csv('device_cookie_feature.csv')
+    device_cookie.to_csv('data/device_cookie_feature.csv')
 
 def value2vec(value, array):
     res = [0] * len(array)
@@ -168,6 +175,29 @@ def common_ips(set1, set2):
 
     return list(set(tmp1)&set(tmp2))
 
+def append_country():
+    test = pd.read_csv('data/dev_test_basic.csv', header=0)
+    cookie = pd.read_csv('data/cookie_all_basic.csv', header=0)
+    pairs = open('submission_v4.csv', 'rb')
+    for pair in pairs:
+        pair = pair.replace('\n', '').split(',')
+        device = pair[0] + ','
+        print pair[0]
+        country = test[ test['device_id'] == pair[0] ].iat[0, 4]
+        cookies = pair[1].split(' ')
+        print len(cookies)
+        for i in range(0, len(cookies)):
+            print i
+            c = cookies[i]
+            print c
+            print time.time()
+            if cookie[ cookie['cookie_id'] == c ].iat[0, 4] == country:
+                device += c + ' '
+            print time.time()
+        print device.strip()
+        break
+    pairs.close()
+
 
 if __name__ == '__main__':
     #ip_common_sub()
@@ -178,3 +208,4 @@ if __name__ == '__main__':
     #country_stat()
 
     feature()
+    #append_country()
