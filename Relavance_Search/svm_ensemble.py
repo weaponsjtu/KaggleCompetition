@@ -283,6 +283,33 @@ def svm_two(train, test):
     #t_labels = two_features_ensemble(train, test, t_labels)
     return t_labels
 
+# model two features
+def last_stage(train, test, pred):
+    X = []
+    y = train['median_relevance'].values.astype(int)
+    train_features = extract_features(train)
+    test_features = extract_features
+
+def extract_features(data):
+    token_pattern = re.compile(r"(?u)\b\w\w+\b")
+    query_tokens_in_title = []
+    query_tokens_in_description = []
+    for i, row in data.iterrows():
+        query = set(x.lower() for x in token_pattern.findall(row["query"]))
+        title = set(x.lower() for x in token_pattern.findall(row["product_title"]))
+        description = set(x.lower() for x in token_pattern.findall(row["product_description"]))
+        if len(title) > 0:
+            query_tokens_in_title.append( len(query.intersection(title))/len(title))
+        else:
+            query_tokens_in_title.append(0)
+
+        if len(description) > 0:
+            query_tokens_in_description.append( len(query.intersection(description))/len(description))
+        else:
+            query_tokens_in_description.append(0)
+    return [query_tokens_in_title, query_tokens_in_description]
+
+
 import random
 # random generate label by variance
 def random_label(train, K):
@@ -360,9 +387,12 @@ def variance_submission():
     K = 10
     train_set = random_label(train, K)
     preds = []
-    for i in range(K):
+    for i in range(1,K):
         print "Training " + str(i) + "th model......"
         pred = svm_two(train_set[i], test)
+        print pred
+        print len(idx)
+        print len(pred)
         submission = pd.DataFrame({"id": idx, "prediction": pred})
         submission.to_csv("variance_ensemble" + str(i) + ".csv", index=False)
         preds.append(pred)

@@ -72,7 +72,7 @@ def average_ensemble(preds):
         sum = 0
         for j in range(n):
             sum += int(preds[j][i])
-        pred.append( round(sum*1.0/n, 0) )
+        pred.append( int(round(sum*1.0/n, 0)) )
     return pred
 
 #load data
