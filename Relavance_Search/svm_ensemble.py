@@ -7,6 +7,7 @@ __author__ : Abhishek
 """
 import pandas as pd
 import numpy as np
+import scipy as sp
 from sklearn.linear_model import LogisticRegression
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.svm import SVC
@@ -22,13 +23,13 @@ from sklearn.feature_extraction import text
 
 from sklearn import cross_validation
 from sklearn import datasets
+from sklearn.metrics import accuracy_score, mean_absolute_error
+
+from gensim.models import ldamodel
+from gensim import corpora
 
 # array declarations
 sw=[]
-s_data = []
-s_labels = []
-t_data = []
-t_labels = []
 #stopwords tweak - more overhead
 stop_words = ['http','www','img','border','0','1','2','3','4','5','6','7','8','9']
 stop_words = text.ENGLISH_STOP_WORDS.union(stop_words)
@@ -122,14 +123,6 @@ def quadratic_weighted_kappa(y, y_pred):
 
     return (1.0 - numerator / denominator)
 
-def two_features_ensemble(train, test, preds):
-    y = train['median_relevance'].values
-    s_train = []
-    s_test = []
-
-
-
-
 def svm_one(train, test):
     print "svm_one"
 
@@ -157,6 +150,24 @@ def svm_one(train, test):
     X =  tfv.transform(traindata)
     X_test = tfv.transform(testdata)
 
+
+
+
+    ## add two features
+    #two_features = extract_features(train)
+    #features = []
+    #for i in range(len(two_features[0])):
+    #    feature = [two_features[0][i], two_features[1][i]]
+    #    features.append(feature)
+    #X = sp.sparse.csr_matrix( np.append(X.toarray(), features, 1) )
+    #two_features = extract_features(test)
+    #features = []
+    #for i in range(len(two_features[0])):
+    #    feature = [two_features[0][i], two_features[1][i]]
+    #    features.append(feature)
+    #X_test = sp.sparse.csr_matrix( np.append(X_test.toarray(), features, 1) )
+
+
     # Initialize SVD
     svd = TruncatedSVD()
 
@@ -165,6 +176,9 @@ def svm_one(train, test):
 
     # We will use SVM here..
     svm_model = SVC()
+
+    # GradientBoostingClassifier
+    #gbm = GradientBoostingClassifier()
 
     # Create the pipeline
     clf = pipeline.Pipeline([('svd', svd),
@@ -177,6 +191,7 @@ def svm_one(train, test):
 
     # Kappa Scorer
     kappa_scorer = metrics.make_scorer(quadratic_weighted_kappa, greater_is_better = True)
+    #kappa_scorer = metrics.make_scorer(accuracy_score, greater_is_better = True)
 
     # Initialize Grid Search Model
     model = grid_search.GridSearchCV(estimator = clf, param_grid=param_grid, scoring=kappa_scorer,verbose=10, n_jobs=-1, iid=True, refit=True, cv=2)
@@ -203,7 +218,7 @@ def svm_one(train, test):
     #preds = two_features_ensemble(train, test, preds)
     return preds
 
-def svm_two(train, test):
+def svm_two(train, test, stack=0, true_test=None):
     print "svm_two"
     #remove html, remove non text or numeric, make query and title unique features for counts using prefix (accounted for in stopwords tweak)
     stemmer = PorterStemmer()
@@ -222,28 +237,84 @@ def svm_two(train, test):
                 preprocessed_docs.append(final_doc)
             return preprocessed_docs
 
+    s_data = []
+    s_labels = []
+    t_data = []
+    t_labels = []
 
     #for i in range(len(train.id)):
     for i in list(train.index):
         s=(" ").join(["q"+ z for z in BeautifulSoup(train["query"][i]).get_text(" ").split(" ")]) + " " + (" ").join(["z"+ z for z in BeautifulSoup(train["product_title"][i]).get_text(" ").split(" ")]) + " " + BeautifulSoup(train["product_description"][i]).get_text(" ")
+        #s=(" ").join([z for z in BeautifulSoup(train["query"][i]).get_text(" ").split(" ")]) + " " + (" ").join([z for z in BeautifulSoup(train["product_title"][i]).get_text(" ").split(" ")]) + " " + BeautifulSoup(train["product_description"][i]).get_text(" ")
         s=re.sub("[^a-zA-Z0-9]"," ", s)
         s= (" ").join([stemmer.stem(z) for z in s.split(" ")])
         s_data.append(s)
+        #s_data.append(s.split(' '))
         s_labels.append(str(train["median_relevance"][i]))
+
+    if stack == 1:
+        t_labels = []
 
     #for i in range(len(test.id)):
     for i in list(test.index):
         s=(" ").join(["q"+ z for z in BeautifulSoup(test["query"][i]).get_text().split(" ")]) + " " + (" ").join(["z"+ z for z in BeautifulSoup(test["product_title"][i]).get_text().split(" ")]) + " " + BeautifulSoup(test["product_description"][i]).get_text()
+        #s=(" ").join([z for z in BeautifulSoup(test["query"][i]).get_text().split(" ")]) + " " + (" ").join([z for z in BeautifulSoup(test["product_title"][i]).get_text().split(" ")]) + " " + BeautifulSoup(test["product_description"][i]).get_text()
         s=re.sub("[^a-zA-Z0-9]"," ", s)
         s= (" ").join([stemmer.stem(z) for z in s.split(" ")])
         t_data.append(s)
+        #t_data.append(s.split(' '))
 
-    tfv = TfidfVectorizer(min_df=5, max_df=500, max_features=None, strip_accents='unicode', analyzer='word', token_pattern=r'\w{1,}', ngram_range=(1, 2), use_idf=True, smooth_idf=True, sublinear_tf=True, stop_words = 'english')
+        if stack == 1:
+            t_labels.append( str(test['median_relevance'][i]) )
+
+    if stack == 1:
+        true_test_data = []
+        for i in list(true_test.index):
+            s=(" ").join(["q"+ z for z in BeautifulSoup(true_test["query"][i]).get_text().split(" ")]) + " " + (" ").join(["z"+ z for z in BeautifulSoup(true_test["product_title"][i]).get_text().split(" ")]) + " " + BeautifulSoup(true_test["product_description"][i]).get_text()
+            s=re.sub("[^a-zA-Z0-9]"," ", s)
+            s= (" ").join([stemmer.stem(z) for z in s.split(" ")])
+            true_test_data.append(s)
+
+
+    tfv = TfidfVectorizer(min_df=3, max_df=500, max_features=None, strip_accents='unicode', analyzer='word', token_pattern=r'\w{1,}', ngram_range=(1, 2), use_idf=True, smooth_idf=True, sublinear_tf=True, stop_words = 'english')
 
     # Fit TFIDF
     tfv.fit(s_data)
     X =  tfv.transform(s_data)
     X_test = tfv.transform(t_data)
+
+    # LDA, topic model
+    #dictionary = corpora.Dictionary(s_data)
+    #corpus = [dictionary.doc2bow(text) for text in s_data]
+    #lda = ldamodel.LdaModel(corpus, id2word=dictionary, num_topics=100)
+    #corpus_test = [dictionary.doc2bow(text) for text in t_data]
+    #X = lda[corpus]
+    #X_test = lda[corpus_test]
+
+    ## add two features
+    #two_features = extract_features(train)
+    #features = []
+    #for i in range(len(two_features[0])):
+    #    feature = [two_features[0][i], two_features[1][i]]
+    #    features.append(feature)
+    #X = sp.sparse.csr_matrix( np.append(X.toarray(), features, 1) )
+    #two_features = extract_features(test)
+    #features = []
+    #for i in range(len(two_features[0])):
+    #    feature = [two_features[0][i], two_features[1][i]]
+    #    features.append(feature)
+    #X_test = sp.sparse.csr_matrix( np.append(X_test.toarray(), features, 1) )
+
+    if stack == 1:
+        entire_data = []
+        entire_data.extend(s_data)
+        entire_data.extend(t_data)
+        entire_X = tfv.transform(entire_data)
+        entire_labels = []
+        entire_labels.extend(s_labels)
+        entire_labels.extend(t_labels)
+        true_test_X = tfv.transform(true_test_data)
+
 
     #create sklearn pipeline, fit all, and predit test data
     clf = Pipeline([
@@ -255,6 +326,7 @@ def svm_two(train, test):
     # Create a parameter grid to search for best parameters for everything in the pipeline
     param_grid = {'svd__n_components' : [200, 400],
                   'svm__C': [10, 12]}
+                  #'svm__kernel': ['linear', 'poly', 'rbf', 'sigmoid']}
 
     # Kappa Scorer
     kappa_scorer = metrics.make_scorer(quadratic_weighted_kappa, greater_is_better = True)
@@ -274,21 +346,26 @@ def svm_two(train, test):
     best_model = model.best_estimator_
 
     best_model.fit(X, s_labels)
-    t_labels = best_model.predict(X_test)
+    t_pred = best_model.predict(X_test)
 
-    #scores = cross_validation.cross_val_score(best_model, X, s_labels, cv=10)
-    #print scores
+    if stack == 1:
+        best_model.fit(X_test, t_labels)
+        s_pred = best_model.predict(X)
 
-    # Add two features for ensemble
-    #t_labels = two_features_ensemble(train, test, t_labels)
-    return t_labels
+        best_model.fit(entire_X, entire_labels)
+        pred = best_model.predict(true_test_X)
+        return [s_pred, t_pred, pred]
+
+    return t_pred
 
 # model two features
-def last_stage(train, test, pred):
-    X = []
-    y = train['median_relevance'].values.astype(int)
-    train_features = extract_features(train)
-    test_features = extract_features
+def last_stage(feature, label, test):
+    clf = Pipeline([
+    ('scl', StandardScaler(copy=True, with_mean=True, with_std=True)),
+    ('svm', SVC(kernel='rbf', degree=3, gamma=0.0, coef0=0.0, shrinking=True, probability=False, tol=0.001, cache_size=200, class_weight=None, verbose=False, max_iter=-1, random_state=None))])
+    clf.fit(feature, label)
+    pred = clf.predict(test)
+    return pred
 
 def extract_features(data):
     token_pattern = re.compile(r"(?u)\b\w\w+\b")
@@ -323,14 +400,38 @@ def random_label(train, K):
     for i in list(train.index):
         print "Preprocessing " + str(i) + "th train data"
         num_change = int(train['relevance_variance'][i] * K/max_variance)
-        tmp_label_set = list(label_set)
-        tmp_label_set.remove( train['median_relevance'][i] )
+        tmp_label = train['median_relevance'][i]
+        if tmp_label == 1:
+            tmp_label_set = [2]
+        elif tmp_label == 2:
+            tmp_label_set = [1,3]
+        elif tmp_label == 3:
+            tmp_label_set = [2,4]
+        elif tmp_label == 4:
+            tmp_label_set = [3]
+        else:
+            pass
+
+        tmp_len = len(tmp_label_set)
         for j in range(num_change):
-            train_set[j]['median_relevance'][i] = tmp_label_set[random.randint(0,2)]
+            train_set[j]['median_relevance'][i] = tmp_label_set[random.randint(0,tmp_len-1)]
 
     for i in range(K):
         print train_set[i]['median_relevance'].value_counts()
     return train_set
+
+def svm_average(train,test):
+    t_labels = svm_two(train, test)
+    preds = svm_one(train, test)
+
+    import math
+    p3 = []
+    for i in range(len(preds)):
+        x = (int(t_labels[i]) + int(preds[i]))/2
+        x = math.floor(x)
+        p3.append(int(x))
+    return p3
+
 
 def average_submission():
     #load data
@@ -347,13 +448,16 @@ def average_submission():
     import math
     p3 = []
     for i in range(len(preds)):
-        x = (int(t_labels[i]) + preds[i])/2
-        x = math.floor(x)
+        #x = (int(t_labels[i]) + int(preds[i]))/2
+        #x = math.floor(x)
+        #p3.append(int(x))
+        x =math.sqrt((int(t_labels[i]))*int(preds[i]))
+        x = round(x)
         p3.append(int(x))
 
     # Create your first submission file
     submission = pd.DataFrame({"id": idx, "prediction": p3})
-    submission.to_csv("ensemble.csv", index=False)
+    submission.to_csv("average_ensemble.csv", index=False)
 
 def vote_ensemble(preds):
     n = len(preds)
@@ -374,7 +478,7 @@ def average_ensemble(preds):
     for i in range(m):
         sum = 0
         for j in range(n):
-            sum += preds[j][i]
+            sum += int(preds[j][i])
         pred.append( int(sum/n) )
     return pred
 
@@ -387,12 +491,9 @@ def variance_submission():
     K = 10
     train_set = random_label(train, K)
     preds = []
-    for i in range(1,K):
+    for i in range(K):
         print "Training " + str(i) + "th model......"
-        pred = svm_two(train_set[i], test)
-        print pred
-        print len(idx)
-        print len(pred)
+        pred = svm_average(train_set[i], test)
         submission = pd.DataFrame({"id": idx, "prediction": pred})
         submission.to_csv("variance_ensemble" + str(i) + ".csv", index=False)
         preds.append(pred)
@@ -408,6 +509,68 @@ def variance_submission():
     submission.to_csv("variance_ensemble_average.csv", index=False)
 
 
+#####
+# Split the train set in 2 parts: train_a and train_b
+# Fit a first-stage model on train_a and create predictions for train_b
+# Fit the same model on train_b and create predictions for train_a
+# Finally fit the model on the entire train set and create predictions for the test set.
+# Now train a second-stage stacker model on the probabilities from the first-stage model(s)
+#####
+def stack_submission():
+    #load data
+    train = pd.read_csv("train.csv").fillna("")
+    test  = pd.read_csv("test.csv").fillna("")
+    idx = test.id.values.astype(int)
+    y = list(train['median_relevance'].values)
+
+    A_train, B_train, A_test, B_test = cross_validation.train_test_split(train, y, test_size=0.5, random_state=0)
+
+    pred = svm_two(A_train, B_train, 1, test)
+
+
+    feature_train = []
+    feature_test = []
+
+    two_features = extract_features(A_train)
+    for i in range( len(A_train.index) ):
+        feature = [pred[0][i], two_features[0][i], two_features[1][i]]
+        feature_train.append(feature)
+
+    two_features = extract_features(B_train)
+    for i in range( len(B_train.index) ):
+        feature = [pred[1][i], two_features[0][i], two_features[1][i]]
+        feature_train.append(feature)
+
+    two_features = extract_features(test)
+    for i in range( len(test.index) ):
+        feature = [pred[2][i], two_features[0][i], two_features[1][i]]
+        feature_test.append(feature)
+
+    A_test.extend(B_test)
+    pred = last_stage(feature_train, A_test, feature_test)
+
+    submission = pd.DataFrame({"id": idx, "prediction": pred})
+    submission.to_csv("stack_ensemble.csv", index=False)
+
+def single_submission():
+    #load data
+    train = pd.read_csv("train.csv").fillna("")
+    test  = pd.read_csv("test.csv").fillna("")
+    idx = test.id.values.astype(int)
+
+    # we select low variance samples
+    #train = train[ train['relevance_variance'] < 0.5 ]
+
+    pred = svm_one(train, test)
+
+    # Create your first submission file
+    submission = pd.DataFrame({"id": idx, "prediction": pred})
+    submission.to_csv("single.csv", index=False)
+
 
 if __name__ == '__main__':
-    variance_submission()
+    print "@submission"
+    #variance_submission()
+    #stack_submission()
+    average_submission()
+    #single_submission()
