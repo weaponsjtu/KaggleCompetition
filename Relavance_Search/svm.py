@@ -7,6 +7,7 @@ __author__ : Abhishek
 """
 import pandas as pd
 import numpy as np
+import scipy as sp
 import re
 from sklearn.linear_model import LogisticRegression
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -14,6 +15,12 @@ from sklearn.svm import SVC
 from sklearn.decomposition import TruncatedSVD
 from sklearn.preprocessing import StandardScaler
 from sklearn import decomposition, pipeline, metrics, grid_search
+import sys
+
+from sklearn.metrics.pairwise import linear_kernel
+
+
+import xgboost as xgb
 
 # The following 3 functions have been taken from Ben Hamner's github repository
 # https://github.com/benhamner/Metrics
@@ -120,11 +127,44 @@ def two_features(fit_data, data):
         result.append(tmp)
     return result
 
+def extract_features(data):
+    token_pattern = re.compile(r"(?u)\b\w\w+\b")
+    query_tokens_in_title = []
+    query_tokens_in_description = []
+    for i, row in data.iterrows():
+        query = set(x.lower() for x in token_pattern.findall(row["query"]))
+        title = set(x.lower() for x in token_pattern.findall(row["product_title"]))
+        description = set(x.lower() for x in token_pattern.findall(row["product_description"]))
+        if len(title) > 0:
+            query_tokens_in_title.append( len(query.intersection(title))/len(title))
+        else:
+            query_tokens_in_title.append(0)
+
+        if len(description) > 0:
+            query_tokens_in_description.append( len(query.intersection(description))/len(description))
+        else:
+            query_tokens_in_description.append(0)
+    return [query_tokens_in_title, query_tokens_in_description]
+
+def feature_engineering(X, data):
+    # add two features
+    two_features = extract_features(data)
+    features = []
+    for i in range(len(two_features[0])):
+        feature = [two_features[0][i], two_features[1][i]]
+        features.append(feature)
+    X =  np.append(X, features, 1)
+    return X
+
 if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print "Usage: python svm.py description"
+        exit(1)
+    print sys.argv[1]
 
     # Load the training file
-    train = pd.read_csv('train.csv')
-    test = pd.read_csv('test.csv')
+    train = pd.read_csv('train.csv').fillna("")
+    test = pd.read_csv('test.csv').fillna("")
 
     # we dont need ID columns
     idx = test.id.values.astype(int)
@@ -138,8 +178,10 @@ if __name__ == '__main__':
     train = train.drop(['median_relevance', 'relevance_variance'], axis=1)
 
     # do some lambda magic on text columns
-    traindata = list(train.apply(lambda x:'%s %s %s' % (x['query'],x['product_title'], x['product_description']),axis=1))
-    testdata = list(test.apply(lambda x:'%s %s %s' % (x['query'],x['product_title'], x['product_description']),axis=1))
+    #traindata = list(train.apply(lambda x:'%s %s %s' % (x['query'],x['product_title'], x['product_description']),axis=1))
+    #testdata = list(test.apply(lambda x:'%s %s %s' % (x['query'],x['product_title'], x['product_description']),axis=1))
+    traindata = list(train.apply(lambda x:'%s %s' % (x['query'],x['product_title']),axis=1))
+    testdata = list(test.apply(lambda x:'%s %s' % (x['query'],x['product_title']),axis=1))
 
     # the infamous tfidf vectorizer (Do you remember this one?)
     tfv = TfidfVectorizer(min_df=3,  max_features=None,
@@ -152,12 +194,32 @@ if __name__ == '__main__':
     X =  tfv.transform(traindata)
     X_test = tfv.transform(testdata)
 
-    # Add two features
-    #X = two_features(list(X.toarray()), train)
-    #X_test = two_features(list(X_test.toarray()), test)
 
     # Initialize SVD
-    svd = TruncatedSVD()
+    svd = TruncatedSVD(n_components=300)
+    X = svd.fit_transform(X)
+    X_test = svd.fit_transform(X_test)
+
+    # Add two features
+    X = feature_engineering(X, train)
+    X_test = feature_engineering(X_test, test)
+
+
+    # =====
+    # xgboost try
+    y = y - 1
+    xg_train = xgb.DMatrix(X, label=y)
+    xg_test = xgb.DMatrix(X_test, label=[1]*X_test.shape[0])
+    watchlist = [(xg_train, 'train'), (xg_test, 'test')]
+    param = {}
+    param['objective'] = 'multi:softmax'
+    param['num_class'] = 4
+    num_round = 5
+    bst = xgb.train(param, xg_train, num_round, watchlist)
+    pred = bst.predict(xg_test)
+    print pred
+    exit(1)
+    # =====
 
     # Initialize the standard scaler
     scl = StandardScaler()
@@ -166,12 +228,14 @@ if __name__ == '__main__':
     svm_model = SVC()
 
     # Create the pipeline
-    clf = pipeline.Pipeline([('svd', svd),
-    						 ('scl', scl),
+    #clf = pipeline.Pipeline([('svd', svd),
+    clf = pipeline.Pipeline([
+                             ('scl', scl),
                     	     ('svm', svm_model)])
 
     # Create a parameter grid to search for best parameters for everything in the pipeline
-    param_grid = {'svd__n_components' : [200, 400],
+    #param_grid = {'svd__n_components' : [200, 300, 400],
+    param_grid = {
                   'svm__C': [10, 12]}
 
     # Kappa Scorer
@@ -198,4 +262,4 @@ if __name__ == '__main__':
 
     # Create your first submission file
     submission = pd.DataFrame({"id": idx, "prediction": preds})
-    submission.to_csv("svm_two_features.csv", index=False)
+    submission.to_csv("svm.csv", index=False)
