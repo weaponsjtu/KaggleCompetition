@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 def Gini(y_true, y_pred):
     # check and get number of samples
@@ -12,8 +13,8 @@ def Gini(y_true, y_pred):
     pred_order = arr[arr[:,1].argsort()][::-1,0]
 
     # get Lorenz curves
-    L_true = np.cumsum(true_order) / np.sum(true_order)
-    L_pred = np.cumsum(pred_order) / np.sum(pred_order)
+    L_true = np.cumsum(true_order) *1.0 / np.sum(true_order)
+    L_pred = np.cumsum(pred_order) *1.0/ np.sum(pred_order)
     L_ones = np.linspace(0, 1, n_samples)
 
     # get Gini coefficients (area between curves)
@@ -21,7 +22,7 @@ def Gini(y_true, y_pred):
     G_pred = np.sum(L_ones - L_pred)
 
     # normalize to true Gini coefficient
-    #print G_pred, G_true
+    #print "pred gini is %f, true gini is %f" %(G_pred, G_true)
     return G_pred/G_true
 
 def cv_split(train_z, labels_z, kfold, kiter):
@@ -55,3 +56,11 @@ def write_submission(idx, pred, filename):
     preds = pd.DataFrame({"Id": idx, "Hazard": pred})
     preds = preds.set_index("Id")
     preds.to_csv(filename)
+
+if __name__ == '__main__':
+    a = np.array([4,5,5,8])
+    b = np.array([10, 10, 10, 10])
+    print a
+    print b
+    gini = Gini(a, b)
+    print gini
