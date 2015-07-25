@@ -50,6 +50,7 @@ def transform_pairwise(X, y):
     y_trans : array, shape (k,)
         Output class labels, where classes have values {-1, +1}
     """
+    print 'start transform'
     X_new = []
     y_new = []
     y = np.asarray(y)
@@ -93,6 +94,7 @@ class RankSVM(svm.LinearSVC):
         self
         """
         X_trans, y_trans = transform_pairwise(X, y)
+        print 'transform finished'
         super(RankSVM, self).fit(X_trans, y_trans)
         return self
 

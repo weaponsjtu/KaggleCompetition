@@ -2,6 +2,10 @@ import pandas as pd
 import numpy as np
 
 from sklearn import preprocessing
+from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor
+from sklearn.svm import SVR
+from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn import neighbors
 
 import xgboost as xgb
 from rankSVM import RankSVM
@@ -14,6 +18,7 @@ from ml_metrics import *
 from param import ParamConfig
 
 import time
+import sys
 
 def feature_engineer():
     train = pd.read_csv('data/train.csv', header=0)
@@ -37,53 +42,62 @@ def feature_engineer():
     return train, labels, test, idx
 
 
-def train_model(param, train, labels, test, idx):
-    xgtest = xgb.DMatrix(test)
-
+def train_model(model_param, param, train, labels, flag='train'):
     kfold = param.kfold
     kiter = param.kiter
     train_subsets, labels_subsets = cv_split(train, labels, kfold, kiter)
 
-    if param.model_type == 'RankSVM':
-        print 'RankSVM'
-        best_score = 0
-        best_model = None
-        for i in range(kiter):
-            gini_sum = 0
-            for f in range(kfold):
+    best_score = 0
+    best_model = None
+    model_type = param.model_type
+    #print model_type
+    gini_sum = 0
+    for i in range(kiter):
+        for f in range(kfold):
+            #print "Iter %d, fold %d, start train" %(i, f)
+
+            ######
+            # approach different model
+            # Nearest Neighbors
+            if model_type.count('knn') > 0:
+                n_neighbors = model_param['n_neighbors']
+                weights = model_param['weights']
+                model = neighbors.KNeighborsRegressor(n_neighbors, weights=weights)
+                model.fit( train_subsets[i][f][0], labels_subsets[i][f][0] )
+
+            # linear regression
+            if model_type.count('linear') > 0:
+                model = LinearRegression()
+                model.fit( train_subsets[i][f][0], labels_subsets[i][f][0] )
+
+            # logistic regression
+            if model_type.count('logistic') > 0:
+                model = LogisticRegression()
+                model.fit( train_subsets[i][f][0], labels_subsets[i][f][0] )
+
+            # SVM regression
+            if model_type.count('svr') > 0:
+                model = SVR(C=model_param['C'], epsilon=model_param['epsilon'])
+                model.fit( train_subsets[i][f][0], labels_subsets[i][f][0] )
+
+            # rank SVM
+            if model_type.count('ranksvm') > 0:
                 model = RankSVM().fit( train_subsets[i][f][0], labels_subsets[i][f][0] )
-                pred_val = model.predict( train_subsets[i][f][1] )
-                gini_f = Gini( labels_subsets[i][f][1], pred_val )
-                gini_sum += gini_f
-                if gini_f > best_score:
-                    best_score = gini_f
-                    best_model = model
-            print "Iter %d, Gini Mean is %f" %(i, float(gini_sum)/kfold)
 
-        best_model.save_model('model/single_ranksvm.mod')
-        pred = best_model.predict(xgtest)
-        write_submission(idx, pred, 'single_ranksvm.csv')
+            # random forest regression
+            if model_type.count('rf') > 0:
+                model = RandomForestRegressor(n_estimators=model_param['n_estimators'])
+                model.fit( train_subsets[i][f][0], labels_subsets[i][f][0] )
 
+            # extra tree regression
+            if model_type.count('extratree') > 0:
+                model = ExtraTreesRegressor(n_estimators=model_param['n_estimators'])
+                model.fit( train_subsets[i][f][0], labels_subsets[i][f][0] )
 
-    if param.model_type == 'xgboost':
-        params = {}
-        params["objective"] = "rank:pairwise"
-        params["eta"] = 0.005
-        params["min_child_weight"] = 5
-        params["subsample"] = 0.75
-        params["colsample_bytree"] = 0.85
-        params["scale_pos_weight"] = 1.0
-        params["silent"] = 1
-        params["max_depth"] = 8
-
-
-        num_rounds = 10000
-
-        best_score = 0
-        best_model = None
-        for i in range(kiter):
-            gini_sum = 0
-            for f in range(kfold):
+            # xgboost
+            if model_type.count('xgboost') > 0:
+                params = model_param
+                num_rounds = model_param['num_rounds']
                 #create a train and validation dmatrices
                 xgtrain = xgb.DMatrix(train_subsets[i][f][0], label=labels_subsets[i][f][0])
                 xgval = xgb.DMatrix(train_subsets[i][f][1], label=labels_subsets[i][f][1])
@@ -91,30 +105,46 @@ def train_model(param, train, labels, test, idx):
                 #train using early stopping and predict
                 watchlist = [(xgtrain, "train"),(xgval, "val")]
                 #model = xgb.train(params, xgtrain, num_rounds, watchlist, early_stopping_rounds=100, feval=gini_metric)
-                model = xgb.train(params, xgtrain, num_rounds, watchlist, early_stopping_rounds=100)
+                model = xgb.train(params, xgtrain, num_rounds, watchlist, early_stopping_rounds=100, feval=RMSE)
+                pred_val = model.predict( xgval, ntree_limit=model.best_iteration )
+            ######
 
-                pred_val = model.predict(xgval)
-                gini_f = Gini(labels_subsets[i][f][1], pred_val)
-                #print "Iter %d, fold %d, Gini Mean is %f" %(i, f, gini_f)
-                gini_sum += gini_f
+            if model_type.count('xgboost') == 0:
+                pred_val = model.predict( train_subsets[i][f][1] )
+            gini_f = Gini( labels_subsets[i][f][1], pred_val )
+            #print "Iter %d, fold %d,  Gini Mean is %f" %(i, f, gini_f)
+            gini_sum += gini_f
+            if gini_f > best_score:
+                best_score = gini_f
+                best_model = model
+        #print "Iter %d, Gini Mean is %f" %(i, float(gini_sum)/kfold)
+    print "All Gini Mean is %f" %(float(gini_sum)/(kfold*kiter))
+    if flag == 'param':
+        return (kfold*kiter)/float(gini_sum)
+    return best_model, model_type
 
-                if gini_f > best_score:
-                    best_score = gini_f
-                    best_model = model
-            print "Iter %d, Gini Mean is %f" %(i, float(gini_sum)/kfold)
-
-        best_model.save_model('model/single_best.mod')
+def predict(best_model, model_type, test, idx):
+    if model_type.count('xgboost') > 0:
+        best_model.save_model('model/single_'+model_type+'.mod')
+        xgtest = xgb.DMatrix(test)
         pred = best_model.predict(xgtest)
-        write_submission(idx, pred, 'single_best.csv')
-
+    else:
+        pred = best_model.predict(test)
+    write_submission(idx, pred, 'single_' + model_type + '.csv')
 
 if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print 'Usage: python single.py [rf, extratree, svr, ranksvm, xgboost, linear, logistic, knn]'
+        exit(1)
     start_time = time.time()
 
     param = ParamConfig()
+    param.model_type = sys.argv[1]
+    model_param = param.best_param[param.model_type]
     print 'single model'
     train, labels, test, idx = feature_engineer()
-    train_model(param, train, labels, test, idx)
+    best_model, model_type = train_model(model_param, param, train, labels)
+    predict(best_model, model_type, test, idx)
 
     end_time = time.time()
     print "cost time %f" %( (end_time - start_time)/1000 )
