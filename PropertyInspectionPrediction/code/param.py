@@ -1,11 +1,32 @@
+import os
 
 from hyperopt import hp, pyll
 
 class ParamConfig:
-    def __init__(self):
-        self.kfold = 2  # cross validation, k-fold
-        self.kiter = 1  # shuffle dataset, and repeat CV
-        self.model_list = ['linear', 'logistic', 'svr', 'ranksvm', 'rf', 'extratree', 'xgboost', 'knn', 'dnn']
+    def __init__(self, data_folder):
+        self.kfold = 3  # cross validation, k-fold
+        self.kiter = 3  # shuffle dataset, and repeat CV
+
+        self.origin_train_path = "../data/train.csv"
+        self.origin_test_path = "../data/test.csv"
+        self.feat_names_file = "feat/feat_names.pkl"
+
+        self.data_folder = data_folder
+        if not os.path.exists(self.data_folder):
+            os.makedirs(self.data_folder)
+
+        # create folder for train/test
+        if not os.path.exists("%s/all"% self.data_folder):
+            os.makedirs("%s/all"% self.data_folder)
+
+        # create folder for cross validation, each iter and fold
+        for i in range(self.kiter):
+            for f in range(self.kfold):
+                path = "%s/iter%d/fold%d" %(self.data_folder, i, f)
+                if not os.path.exists(path):
+                    os.makedirs(path)
+
+        self.model_list = ['linear', 'logistic', 'svr', 'ranksvm', 'rf', 'extratree', 'gbf', 'xgboost', 'knn', 'dnn']
         self.model_type = 'xgboost'
         self.param_spaces = {
             'linear': {
@@ -20,6 +41,9 @@ class ParamConfig:
                 'n_estimators': pyll.scope.int(hp.quniform('n_estimators', 100, 1000, 100)),
             },
             'extratree': {
+                'n_estimators': pyll.scope.int(hp.quniform('n_estimators', 100, 1000, 100)),
+            },
+            'gbf': {
                 'n_estimators': pyll.scope.int(hp.quniform('n_estimators', 100, 1000, 100)),
             },
             'svr': {
@@ -71,3 +95,5 @@ class ParamConfig:
                 'batch_size': 16,
             },
         }
+
+config = ParamConfig("feat")

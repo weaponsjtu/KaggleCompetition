@@ -41,6 +41,25 @@ def feature_engineer():
 
     return train, labels, test, idx
 
+from keras.models import Sequential
+from keras.layers.core import Dense, Dropout, Activation, Flatten
+from keras.optimizers import SGD, Adadelta, Adagrad
+def deep_model():
+    model = Sequential()
+    model.add(Dense(33, 20, init='uniform', activation='sigmoid'))
+    model.add(Dropout(0.5))
+    model.add(Dense(20, 10, init='uniform', activation='sigmoid'))
+    model.add(Dropout(0.5))
+    model.add(Dense(10, 1, init='uniform', activation='linear'))
+
+    sgd = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
+    model.compile(loss='mean_squared_error', optimizer=sgd)
+
+    #model.fit(X_train, y_train, nb_epoch=20, batch_size=16)
+    #score = model.evaluate(X_test, y_test, batch_size=16)
+    return model
+
+
 
 def train_model(model_param, param, train, labels, flag='train'):
     kfold = param.kfold
@@ -58,6 +77,13 @@ def train_model(model_param, param, train, labels, flag='train'):
 
             ######
             # approach different model
+            # Deep Learning Model
+            if model_type.count('dnn') > 0:
+                model = deep_model()
+                model.fit(train_subsets[i][f][0], labels_subsets[i][f][0], nb_epoch=2, batch_size=16)
+                pred_val = model.predict( train_subsets[i][f][1], batch_size=16 )
+                pred_val = pred_val.reshape( pred_val.shape[0] )
+
             # Nearest Neighbors
             if model_type.count('knn') > 0:
                 n_neighbors = model_param['n_neighbors']
@@ -109,7 +135,7 @@ def train_model(model_param, param, train, labels, flag='train'):
                 pred_val = model.predict( xgval, ntree_limit=model.best_iteration )
             ######
 
-            if model_type.count('xgboost') == 0:
+            if model_type.count('xgboost') == 0 and model_type.count('dnn') == 0:
                 pred_val = model.predict( train_subsets[i][f][1] )
             gini_f = Gini( labels_subsets[i][f][1], pred_val )
             #print "Iter %d, fold %d,  Gini Mean is %f" %(i, f, gini_f)
@@ -128,13 +154,16 @@ def predict(best_model, model_type, test, idx):
         best_model.save_model('model/single_'+model_type+'.mod')
         xgtest = xgb.DMatrix(test)
         pred = best_model.predict(xgtest)
+    elif model_type.count('dnn') > 0:
+        pred = best_model.predict(test, batch_size=16)
+        pred = pred.reshape( pred.shape[0] )
     else:
         pred = best_model.predict(test)
     write_submission(idx, pred, 'single_' + model_type + '.csv')
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print 'Usage: python single.py [rf, extratree, svr, ranksvm, xgboost, linear, logistic, knn]'
+        print 'Usage: python single.py [rf, extratree, svr, ranksvm, xgboost, linear, logistic, knn, dnn]'
         exit(1)
     start_time = time.time()
 
@@ -144,7 +173,7 @@ if __name__ == '__main__':
     print 'single model'
     train, labels, test, idx = feature_engineer()
     best_model, model_type = train_model(model_param, param, train, labels)
-    predict(best_model, model_type, test, idx)
+    #predict(best_model, model_type, test, idx)
 
     end_time = time.time()
     print "cost time %f" %( (end_time - start_time)/1000 )
