@@ -9,7 +9,8 @@ class ParamConfig:
 
         self.origin_train_path = "../data/train.csv"
         self.origin_test_path = "../data/test.csv"
-        self.feat_names_file = "feat/feat_names.pkl"
+
+        self.feat_names = ['label_encode', 'dictvec']
 
         self.data_folder = data_folder
         if not os.path.exists(self.data_folder):
@@ -26,7 +27,9 @@ class ParamConfig:
                 if not os.path.exists(path):
                     os.makedirs(path)
 
-        self.model_list = ['linear', 'logistic', 'svr', 'ranksvm', 'rf', 'extratree', 'gbf', 'xgboost', 'knn', 'dnn']
+        #self.model_list = ['linear', 'logistic', 'svr', 'ranksvm', 'rf', 'extratree', 'gbf', 'xgboost', 'knn', 'dnn']
+
+        self.model_list = ['rf', 'xgboost']
         self.model_type = 'xgboost'
         self.param_spaces = {
             'linear': {
@@ -85,10 +88,11 @@ class ParamConfig:
                 'booster': 'gbtree',
                 'objective': 'reg:linear',
                 'eta': 0.005,
-                'min_child_weight': 5,
-                'subsample': 0.75,
-                'silent': 0,
-                'max_depth': 8,
+                'min_child_weight': 6,
+                'subsample': 0.7,
+                'colsample_bytree': 0.7,
+                'silent': 1,
+                'max_depth': 9,
                 'num_rounds': 10000,
             },
             'dnn': {

@@ -10,7 +10,7 @@ from hyperopt import hp
 from utils import *
 
 
-def xgboost_pred(train,labels,test, weight):
+def xgboost_pred(train,labels,test):
     params = {}
     params["objective"] = "reg:linear"
     params["eta"] = 0.005  # [0,1]
@@ -72,8 +72,8 @@ def xgboost_pred(train,labels,test, weight):
 
     #combine predictions
     #since the metric only cares about relative rank we don"t need to average
-    #preds = preds1*1.5 + preds2*8.5
-    preds = preds1*weight + preds2*(1-weight)
+    preds = preds1*1.5 + preds2*8.5
+    #preds = preds1*weight + preds2*(1-weight)
     #preds = preds1*preds2
     print 'Gini Score is ', (score1+score2)/2
     return preds
@@ -116,7 +116,7 @@ def main(flag):
     train_s = train_s.astype(float)
     test_s = test_s.astype(float)
 
-    preds1 = xgboost_pred(train_s,labels,test_s, 1.5)
+    preds1 = xgboost_pred(train_s,labels,test_s)
 
     #model_2 building
 
@@ -127,10 +127,10 @@ def main(flag):
     train = vec.fit_transform(train)
     test = vec.transform(test)
 
-    preds2 = xgboost_pred(train,labels,test, 1.6)
+    preds2 = xgboost_pred(train,labels,test)
 
 
-    preds = 0.463 * preds1 + 0.537 * preds2
+    preds = 0.463 * (preds1**0.98) + 0.537 * (preds2**0.98)
     #preds = preds1*preds2
 
     if flag:
@@ -139,7 +139,7 @@ def main(flag):
     #generate solution
     preds = pd.DataFrame({"Id": test_ind, "Hazard": preds})
     preds = preds.set_index("Id")
-    preds.to_csv("xgboost_benchmark_sep.csv")
+    preds.to_csv("xgboost_benchmark_pow_98.csv")
 
 from sklearn.decomposition import PCA
 def pca_wrapper(array):
@@ -149,6 +149,6 @@ def pca_wrapper(array):
 
 
 if __name__ == '__main__':
-    print 'xgb model, sep, 1.5, 1.6'
+    print 'xgb model, pow, label**0.98'
     flag = False
     main(flag)

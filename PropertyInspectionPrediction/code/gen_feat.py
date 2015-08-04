@@ -10,7 +10,7 @@ from param import config
 def extract_feature(path, train, test, type, feat_names):
     y_train = train['Hazard'].values
     train.drop("Hazard", axis=1, inplace=True)
-    y_test = [1] * len(train.index)
+    y_test = [1] * len(test.index)
     if type == "valid":
         y_test = test['Hazard'].values
         test.drop("Hazard", axis=1, inplace=True)
@@ -72,7 +72,8 @@ if __name__ == "__main__":
         skf = pickle.load(i_f)
 
     # extract features
-    feat_names = ["label_encode", "dictvec"]
+    #feat_names = ["label_encode", "dictvec"]
+    feat_names = config.feat_names
 
     # for cross validation
     #print "Extract feature for cross validation"
@@ -90,7 +91,3 @@ if __name__ == "__main__":
     path = "%s/all" % config.data_folder
     extract_feature(path, train, test, "test", feat_names)
     print "Done"
-
-    # dump feat names
-    with open(config.feat_names_file, 'wb') as f:
-        pickle.dump(feat_names, f, -1)

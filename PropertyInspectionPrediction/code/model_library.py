@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+import cPickle as pickle
+import os
 
 from sklearn import preprocessing
 from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor
@@ -39,118 +41,155 @@ def deep_model():
     return model
 
 
-def train_model(path, x_train, y_train, x_test, y_test, model_type, model_param, feat):
+def train_model(path, x_train, y_train, x_test, y_test, feat):
+
+    model_list = config.model_list
     ######
     # approach different model
     # Deep Learning Model
-    if model_type.count('dnn') > 0:
-        model = deep_model()
-        model.fit(x_train, y_train, nb_epoch=2, batch_size=16)
-        pred_val = model.predict( x_test, batch_size=16 )
-        pred_val = pred_val.reshape( pred_val.shape[0] )
+    if model_list.count('dnn') > 0:
+        model_type = 'dnn'
         pred_file = "%s/%s_%s.pred.pkl" %(path, feat, model_type)
-        with open(pred_file, 'wb') as f:
-            pickle.dump(pred_val, f, -1)
+        if os.path.exists(pred_file) is False:
+            print "%s training..." % model_type
+            model_param = config.best_param[model_type]
+            model = deep_model()
+            model.fit(x_train, y_train, nb_epoch=2, batch_size=16)
+            pred_val = model.predict( x_test, batch_size=16 )
+            pred_val = pred_val.reshape( pred_val.shape[0] )
+            with open(pred_file, 'wb') as f:
+                pickle.dump(pred_val, f, -1)
+            print "Done!"
 
     # Nearest Neighbors
-    if model_type.count('knn') > 0:
-        n_neighbors = model_param['n_neighbors']
-        weights = model_param['weights']
-        model = neighbors.KNeighborsRegressor(n_neighbors=n_neighbors, weights=weights)
-        model.fit( x_train, y_train )
-        pred_val = model.predict( x_test )
+    if model_list.count('knn') > 0:
+        model_type = 'knn'
         pred_file = "%s/%s_%s.pred.pkl" %(path, feat, model_type)
-        with open(pred_file, 'wb') as f:
-            pickle.dump(pred_val, f, -1)
+        if os.path.exists(pred_file) is False:
+            print "%s training..." % model_type
+            model_param = config.best_param[model_type]
+            n_neighbors = model_param['n_neighbors']
+            weights = model_param['weights']
+            model = neighbors.KNeighborsRegressor(n_neighbors=n_neighbors, weights=weights)
+            model.fit( x_train, y_train )
+            pred_val = model.predict( x_test )
+            with open(pred_file, 'wb') as f:
+                pickle.dump(pred_val, f, -1)
+            print "Done!"
 
     # linear regression
-    if model_type.count('linear') > 0:
-        model = LinearRegression()
-        model.fit( x_train, y_train )
-        pred_val = model.predict( x_test )
+    if model_list.count('linear') > 0:
+        model_type = 'linear'
         pred_file = "%s/%s_%s.pred.pkl" %(path, feat, model_type)
-        with open(pred_file, 'wb') as f:
-            pickle.dump(pred_val, f, -1)
+        if os.path.exists(pred_file) is False:
+            print "%s training..." % model_type
+            model_param = config.best_param[model_type]
+            model = LinearRegression()
+            model.fit( x_train, y_train )
+            pred_val = model.predict( x_test )
+            with open(pred_file, 'wb') as f:
+                pickle.dump(pred_val, f, -1)
+            print "Done!"
 
     # logistic regression
-    if model_type.count('logistic') > 0:
-        model = LogisticRegression()
-        model.fit( x_train, y_train )
-        pred_val = model.predict( x_test )
+    if model_list.count('logistic') > 0:
+        model_type = 'logistic'
         pred_file = "%s/%s_%s.pred.pkl" %(path, feat, model_type)
-        with open(pred_file, 'wb') as f:
-            pickle.dump(pred_val, f, -1)
+        if os.path.exists(pred_file) is False:
+            print "%s training..." % model_type
+            model_param = config.best_param[model_type]
+            model = LogisticRegression()
+            model.fit( x_train, y_train )
+            pred_val = model.predict( x_test )
+            with open(pred_file, 'wb') as f:
+                pickle.dump(pred_val, f, -1)
+            print "Done!"
 
     # SVM regression
-    if model_type.count('svr') > 0:
-        model = SVR(C=model_param['C'], epsilon=model_param['epsilon'])
-        model.fit( x_train, y_train )
-        pred_val = model.predict( x_test )
+    if model_list.count('svr') > 0:
+        model_type = 'svr'
         pred_file = "%s/%s_%s.pred.pkl" %(path, feat, model_type)
-        with open(pred_file, 'wb') as f:
-            pickle.dump(pred_val, f, -1)
+        if os.path.exists(pred_file) is False:
+            print "%s training..." % model_type
+            model_param = config.best_param[model_type]
+            model = SVR(C=model_param['C'], epsilon=model_param['epsilon'])
+            model.fit( x_train, y_train )
+            pred_val = model.predict( x_test )
+            with open(pred_file, 'wb') as f:
+                pickle.dump(pred_val, f, -1)
+            print "Done!"
 
     # rank SVM
-    if model_type.count('ranksvm') > 0:
-        model = RankSVM().fit( x_train, y_train )
-        pred_val = model.predict( x_test )
+    if model_list.count('ranksvm') > 0:
+        model_type = 'ranksvm'
         pred_file = "%s/%s_%s.pred.pkl" %(path, feat, model_type)
-        with open(pred_file, 'wb') as f:
-            pickle.dump(pred_val, f, -1)
+        if os.path.exists(pred_file) is False:
+            print "%s training..." % model_type
+            model_param = config.best_param[model_type]
+            model = RankSVM().fit( x_train, y_train )
+            pred_val = model.predict( x_test )
+            with open(pred_file, 'wb') as f:
+                pickle.dump(pred_val, f, -1)
+            print "Done!"
 
     # random forest regression
-    if model_type.count('rf') > 0:
-        model = RandomForestRegressor(n_estimators=model_param['n_estimators'])
-        model.fit( x_train, y_train )
-        pred_val = model.predict( x_test )
+    if model_list.count('rf') > 0:
+        model_type = 'rf'
         pred_file = "%s/%s_%s.pred.pkl" %(path, feat, model_type)
-        with open(pred_file, 'wb') as f:
-            pickle.dump(pred_val, f, -1)
+        if os.path.exists(pred_file) is False:
+            print "%s training..." % model_type
+            model_param = config.best_param[model_type]
+            model = RandomForestRegressor(n_estimators=model_param['n_estimators'])
+            model.fit( x_train, y_train )
+            pred_val = model.predict( x_test )
+            with open(pred_file, 'wb') as f:
+                pickle.dump(pred_val, f, -1)
+            print 'Done!'
 
     # extra tree regression
-    if model_type.count('extratree') > 0:
-        model = ExtraTreesRegressor(n_estimators=model_param['n_estimators'])
-        model.fit( x_train, y_train )
-        pred_val = model.predict( x_test )
+    if model_list.count('extratree') > 0:
+        model_type = 'extratree'
         pred_file = "%s/%s_%s.pred.pkl" %(path, feat, model_type)
-        with open(pred_file, 'wb') as f:
-            pickle.dump(pred_val, f, -1)
+        if os.path.exists(pred_file) is False:
+            print "%s training..." % model_type
+            model_param = config.best_param[model_type]
+            model = ExtraTreesRegressor(n_estimators=model_param['n_estimators'])
+            model.fit( x_train, y_train )
+            pred_val = model.predict( x_test )
+            with open(pred_file, 'wb') as f:
+                pickle.dump(pred_val, f, -1)
+            print "Done!"
 
     # xgboost
-    if model_type.count('xgboost') > 0:
-        params = model_param
-        num_rounds = model_param['num_rounds']
-        #create a train and validation dmatrices
-        xgtrain = xgb.DMatrix(x_train, label=y_train)
-        xgval = xgb.DMatrix(x_test, label=y_test)
-
-        #train using early stopping and predict
-        watchlist = [(xgtrain, "train"),(xgval, "val")]
-        #model = xgb.train(params, xgtrain, num_rounds, watchlist, early_stopping_rounds=100, feval=gini_metric)
-        model = xgb.train(params, xgtrain, num_rounds, watchlist, early_stopping_rounds=100)
-        pred_val = model.predict( xgval, ntree_limit=model.best_iteration )
+    if model_list.count('xgboost') > 0:
+        model_type = 'xgboost'
         pred_file = "%s/%s_%s.pred.pkl" %(path, feat, model_type)
-        with open(pred_file, 'wb') as f:
-            pickle.dump(pred_val, f, -1)
+        if os.path.exists(pred_file) is False:
+            print "%s training..." % model_type
+            model_param = config.best_param[model_type]
+            params = model_param
+            num_rounds = model_param['num_rounds']
+            #create a train and validation dmatrices
+            xgtrain = xgb.DMatrix(x_train, label=y_train)
+            xgval = xgb.DMatrix(x_test, label=y_test)
+            print x_test.shape[0]
+            print len(y_test)
+
+            #train using early stopping and predict
+            watchlist = [(xgtrain, "train"),(xgval, "val")]
+            #model = xgb.train(params, xgtrain, num_rounds, watchlist, early_stopping_rounds=100, feval=gini_metric)
+            model = xgb.train(params, xgtrain, num_rounds, watchlist, early_stopping_rounds=100)
+            pred_val = model.predict( xgval, ntree_limit=model.best_iteration )
+            with open(pred_file, 'wb') as f:
+                pickle.dump(pred_val, f, -1)
+            print "Done!"
     ######
-    return best_model, model_type
 
-def predict(best_model, model_type, test, idx):
-    if model_type.count('xgboost') > 0:
-        best_model.save_model('model/single_'+model_type+'.mod')
-        xgtest = xgb.DMatrix(test)
-        pred = best_model.predict(xgtest)
-    elif model_type.count('dnn') > 0:
-        pred = best_model.predict(test, batch_size=16)
-        pred = pred.reshape( pred.shape[0] )
-    else:
-        pred = best_model.predict(test)
-    write_submission(idx, pred, 'single_' + model_type + '.csv')
+def one_model():
+    # load feat names
+    feat_names = config.feat_names
 
-def one_model(param, model_type):
-    model_param = param.param_space[model_type]
     # load feat, cross validation
-    cv_score = []
     for iter in range(config.kiter):
         for fold in range(config.kfold):
             for feat in feat_names:
@@ -159,25 +198,25 @@ def one_model(param, model_type):
                 with open("%s/iter%d/fold%d/valid.%s.feat.pkl" %(config.data_folder, iter, fold, feat), 'rb') as f:
                     [x_val, y_val] = pickle.load(f)
                 path = "%s/iter%d/fold%d" %(config.data_folder, iter, fold)
-                score = train_model(path, x_train, y_train, x_val, y_val, model_type, model_param, feat)
-                cv_score.append(score)
+                train_model(path, x_train, y_train, x_val, y_val, feat)
+
+    # load feat, train/test
+    for feat in feat_names:
+        with open("%s/all/train.%s.feat.pkl" %(config.data_folder, feat), 'rb') as f:
+            [x_train, y_train] = pickle.load(f)
+        with open("%s/all/test.%s.feat.pkl" %(config.data_folder, feat), 'rb') as f:
+            [x_test, y_test] = pickle.load(f)
+        path = "%s/all" %(config.data_folder)
+        train_model(path, x_train, y_train, x_test, y_test, feat)
 
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print 'Usage: python single.py [rf, extratree, svr, ranksvm, xgboost, linear, logistic, knn, dnn]'
-        exit(1)
     start_time = time.time()
 
     # write your code here
     # apply different model on different feature, generate model library
 
-    # load data
-    train = pd.read_csv(config.origin_train_path, header=0)
-    test = pd.read_csv(config.origin_test_path, header=0)
-
-    with open(config.feat_names_file, 'rb') as f:
-        feat_names = pickle.load(f)
+    one_model()
 
 
 
