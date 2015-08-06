@@ -10,6 +10,7 @@
 import cPickle as pickle
 import numpy as np
 import pandas as pd
+import sys
 
 from hyperopt import fmin, tpe, hp, Trials, STATUS_OK, pyll
 
@@ -101,9 +102,13 @@ def ensemble_selection():
     while True:
         ensemble_iter += 1
         for model in sorted_model:
+            # jump for the first max model
+            if ensemble_iter == 1 and model == sorted_model[0]:
+                continue
+
             obj = lambda param: ensemble_selection_obj(param, model_pred_tmp, model_valid_pred[model], valid_labels, num_valid_matrix)
             param_space = {
-                'weight': hp.quniform('weight', -1, 1, 0.1),
+                'weight': hp.quniform('weight', 0, 1, 0.1),
             }
             trials = Trials()
             best_param = fmin(obj,
@@ -123,6 +128,10 @@ def ensemble_selection():
                     score = Gini(y_true, y_pred)
                     gini_cv_tmp[iter, fold] = score
 
+
+            fid = model/len(model_list)
+            mid = model % len(model_list)
+            print "Iter %d, Gini %f, Model %s - %s, Weight %f" %(ensemble_iter, np.mean(gini_cv_tmp), feat_names[fid], model_list[mid], best_w)
             if np.mean(gini_cv_tmp) > best_gini:
                 best_gini, best_model, best_weight = np.mean(gini_cv_tmp), model, best_w
         if best_model == None:
@@ -143,17 +152,19 @@ def ensemble_selection():
         best_model = None
 
     # save best model list
-    path = "%s/all" % config.data_folder
-    with open("%s/best_model_list" %path, 'wb') as f:
+    with open("%s/best_model_list" % config.data_folder, 'wb') as f:
         pickle.dump([sorted_model, best_model_list, best_weight_list], f, -1)
 
 def ensemble_prediction():
     # load best model list
-    path = "%s/feat/all" % config.data_folder
-    with open("%s/best_model_list" %path, 'rb') as f:
+    with open("%s/best_model_list" % config.data_folder, 'rb') as f:
         [sorted_model, best_model_list, best_weight_list] = pickle.load(f)
 
+    model_list = config.model_list
+    feat_names = config.feat_names
+
     # prediction, generate submission file
+    path = "%s/all" % config.data_folder
     fid = sorted_model[0]/len(model_list)
     mid = sorted_model[0]%len(model_list)
     with open("%s/%s_%s.pred.pkl" %(path, feat_names[fid], model_list[mid]), 'rb') as f:
@@ -172,7 +183,11 @@ def ensemble_prediction():
     idx = test.index
     preds = pd.DataFrame({"Id": idx, "Hazard": y_pred})
     preds = preds.set_index("Id")
-    preds.to_csv("model_library.csv")
+    preds.to_csv("sub/model_library.csv")
 
 if __name__ == "__main__":
-    ensemble_selection()
+    flag = sys.argv[1]
+    if flag == "ensemble":
+        ensemble_selection()
+    if flag == "submission":
+        ensemble_prediction()

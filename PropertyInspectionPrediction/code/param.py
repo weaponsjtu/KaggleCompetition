@@ -7,6 +7,12 @@ class ParamConfig:
         self.kfold = 3  # cross validation, k-fold
         self.kiter = 3  # shuffle dataset, and repeat CV
 
+        self.DEBUG = True
+        self.hyper_max_evals = 100
+
+        if self.DEBUG:
+            self.hyper_max_evals = 5
+
         self.origin_train_path = "../data/train.csv"
         self.origin_test_path = "../data/test.csv"
 
@@ -29,7 +35,7 @@ class ParamConfig:
 
         #self.model_list = ['linear', 'logistic', 'svr', 'ranksvm', 'rf', 'extratree', 'gbf', 'xgboost', 'knn', 'dnn']
 
-        self.model_list = ['rf', 'xgboost']
+        self.model_list = ['rf', 'xgboost', 'gbf']
         self.model_type = 'xgboost'
         self.param_spaces = {
             'linear': {
@@ -38,7 +44,8 @@ class ParamConfig:
             },
             'knn': {
                 'n_neighbors': pyll.scope.int(hp.quniform('n_neighbors', 5, 6, 1)),
-                'weights': hp.choice('weights', ['uniform', 'distance']),
+                #'weights': hp.choice('weights', ['uniform', 'distance']),
+                'weights': 'distance',
             },
             'rf': {
                 'n_estimators': pyll.scope.int(hp.quniform('n_estimators', 100, 1000, 100)),
@@ -55,7 +62,7 @@ class ParamConfig:
             'xgboost': {
                 'booster': 'gbtree',
                 'objective': 'reg:linear',
-                'n_estimators': pyll.scope.int(hp.quniform('n_estimators', 100, 1000, 100)),
+                #'n_estimators': pyll.scope.int(hp.quniform('n_estimators', 100, 1000, 100)),
                 'eta': hp.quniform('eta', 0.01, 1, 0.01),
                 'gamma': hp.quniform('gamma', 0, 2, 0.1),
                 'min_child_weight': pyll.scope.int( hp.quniform('min_child_weight', 0, 10, 1) ),
@@ -79,6 +86,9 @@ class ParamConfig:
                 'n_estimators': 100,
             },
             'extratree': {
+                'n_estimators': 100,
+            },
+            'gbf': {
                 'n_estimators': 100,
             },
             'svr': {
