@@ -72,7 +72,7 @@ def xgboost_pred(train,labels,test):
 
     #combine predictions
     #since the metric only cares about relative rank we don"t need to average
-    preds = preds1*1.5 + preds2*8.5
+    preds = preds1*1.4 + preds2*8.6
     #preds = preds1*weight + preds2*(1-weight)
     #preds = preds1*preds2
     print 'Gini Score is ', (score1+score2)/2
@@ -130,7 +130,7 @@ def main(flag):
     preds2 = xgboost_pred(train,labels,test)
 
 
-    preds = 0.463 * (preds1**0.98) + 0.537 * (preds2**0.98)
+    preds = 0.45 * (preds1**0.31) + 0.55 * (preds2**0.31)
     #preds = preds1*preds2
 
     if flag:
@@ -139,7 +139,7 @@ def main(flag):
     #generate solution
     preds = pd.DataFrame({"Id": test_ind, "Hazard": preds})
     preds = preds.set_index("Id")
-    preds.to_csv("xgboost_benchmark_pow_98.csv")
+    preds.to_csv("xgboost_benchmark_pow_31.csv")
 
 from sklearn.decomposition import PCA
 def pca_wrapper(array):
@@ -149,6 +149,6 @@ def pca_wrapper(array):
 
 
 if __name__ == '__main__':
-    print 'xgb model, pow, label**0.98'
+    print 'xgb model, pow, label**0.31'
     flag = False
     main(flag)

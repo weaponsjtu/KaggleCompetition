@@ -35,7 +35,8 @@ class ParamConfig:
 
         #self.model_list = ['linear', 'logistic', 'svr', 'ranksvm', 'rf', 'extratree', 'gbf', 'xgboost', 'knn', 'dnn']
 
-        self.model_list = ['rf', 'xgboost', 'gbf']
+        self.model_list = ['xgboost-art'] #, 'rf', 'xgboost', 'gbf']
+        self.update_model = ['xgboost-art']
         self.model_type = 'xgboost'
         self.param_spaces = {
             'linear': {
@@ -71,6 +72,22 @@ class ParamConfig:
                 'verbose': 0,
                 'max_depth': pyll.scope.int(hp.quniform('max_depth', 1, 10, 1)),
                 'num_rounds': 10000,
+                'early_stopping_rounds': 120,
+            },
+            'xgboost-art': {
+                'booster': 'gbtree',
+                'objective': 'reg:linear',
+                #'n_estimators': pyll.scope.int(hp.quniform('n_estimators', 100, 1000, 100)),
+                'eta': hp.quniform('eta', 0.01, 1, 0.01),
+                'gamma': hp.quniform('gamma', 0, 2, 0.1),
+                'min_child_weight': pyll.scope.int( hp.quniform('min_child_weight', 0, 10, 1) ),
+                'subsample': hp.quniform('subsample', 0.7, 0.9, 0.05),
+                'silent': 0,
+                'verbose': 0,
+                'max_depth': pyll.scope.int(hp.quniform('max_depth', 1, 10, 1)),
+                'num_rounds': 10000,
+                'valid_size': 0.07843,
+                'early_stopping_rounds': 120,
             },
         }
         self.best_param = {
@@ -83,7 +100,7 @@ class ParamConfig:
                 'weights': 'distance',
             },
             'rf': {
-                'n_estimators': 100,
+                'n_estimators': 700,
             },
             'extratree': {
                 'n_estimators': 100,
@@ -104,6 +121,20 @@ class ParamConfig:
                 'silent': 1,
                 'max_depth': 9,
                 'num_rounds': 10000,
+                'early_stopping_rounds': 120,
+            },
+            'xgboost-art': {
+                'booster': 'gbtree',
+                'objective': 'reg:linear',
+                'eta': 0.005,
+                'min_child_weight': 6,
+                'subsample': 0.7,
+                'colsample_bytree': 0.7,
+                'silent': 1,
+                'max_depth': 9,
+                'num_rounds': 10000,
+                'valid_size': 0.07843,
+                'early_stopping_rounds': 120,
             },
             'dnn': {
                 'batch_size': 16,

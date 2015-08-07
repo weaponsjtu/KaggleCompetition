@@ -134,7 +134,7 @@ def ensemble_obj(param, train_tmp, test_tmp):
     score = Gini(y_true, preds)
     writer.writerow( [score] + list(param.values()) )
     o_f.flush()
-    return 1.0/score
+    return -score
 
 
 def param_opt(param, train, test):
@@ -174,8 +174,8 @@ if __name__ == '__main__':
 
     param = {
         #'offset': pyll.scope.int(hp.quniform('offset', 4000, 10000, 1000)),
-        'weight': 0.463, #hp.quniform('weight', 0.45, 0.5, 0.001),
-        'weight_inter': 1.5, #hp.quniform('weight_inter', 1.4, 1.7, 0.01),
+        'weight': hp.quniform('weight', 0.45, 0.5, 0.001),
+        'weight_inter': hp.quniform('weight_inter', 1.4, 1.7, 0.01),
         'pow_weight': hp.quniform('pow_weight', 0, 1, 0.01),
         #'early_stopping_rounds': pyll.scope.int(hp.quniform('early_stopping_rounds', 50, 150, 10)),
         #'objective': 'reg:linear',
@@ -192,7 +192,7 @@ if __name__ == '__main__':
     }
 
     for k in range(kfold):
-        o_f = open('hyperlogs/xgboost_pow_' + str(k) + '.log', 'wb')
+        o_f = open('hyperlogs/xgboost_pow_opt_' + str(k) + '.log', 'wb')
         writer = csv.writer(o_f)
         train_s = data_split_sets[k][0]
         test_s = data_split_sets[k][1]

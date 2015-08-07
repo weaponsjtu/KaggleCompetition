@@ -10,13 +10,76 @@
 import cPickle as pickle
 import numpy as np
 import pandas as pd
-import sys
+import sys,os
 
 from hyperopt import fmin, tpe, hp, Trials, STATUS_OK, pyll
 
 from param import config
 
 from utils import *
+
+def add_prior_models(model_library):
+    prior_models = {
+            'xgboost-art@1': {
+                'weight': 0.463,
+                'pow_weight': 0.01,
+                },
+            'xgboost-art@2': {
+                'weight': 0.463,
+                'pow_weight': 0.8,
+                },
+            'xgboost-art@3': {
+                'weight': 0.45,
+                'pow_weight': 0.31,
+                },
+            'xgboost-art@4': {
+                'weight': 0.463,
+                'pow_weight': 0.98,
+                },
+            'xgboost-art@5': {
+                'weight': 0.463,
+                'pow_weight': 1,
+                },
+            'xgboost-art@6': {
+                'weight': 0.47,
+                'pow_weight': 1,
+                },
+            }
+    feat_names = config.feat_names
+    model_list = config.model_list
+    for iter in range(config.kiter):
+        for fold in range(config.kfold):
+            path = "%s/iter%d/fold%d" %(config.data_folder, iter, fold)
+            with open("%s/label_encode_xgboost-art.pred.pkl" %path, 'rb') as f:
+                p1 = pickle.load(f)
+            with open("%s/dictvec_xgboost-art.pred.pkl" %path, 'rb') as f:
+                p2 = pickle.load(f)
+            for model in prior_models.keys():
+                if os.path.exists("%s/%s.pred.pkl" %(path, model)) is False:
+                    weight = prior_models[model]['weight']
+                    pow_weight = prior_models[model]['pow_weight']
+                    pred = weight * (p1**pow_weight) + (1-weight) * (p2**pow_weight)
+                    with open("%s/%s.pred.pkl" %(path, model), 'wb') as f:
+                        pickle.dump(pred, f, -1)
+
+    path = "%s/all" %(config.data_folder)
+    with open("%s/label_encode_xgboost-art.pred.pkl" %path, 'rb') as f:
+        p1 = pickle.load(f)
+    with open("%s/dictvec_xgboost-art.pred.pkl" %path, 'rb') as f:
+        p2 = pickle.load(f)
+    for model in prior_models.keys():
+        if os.path.exists("%s/%s.pred.pkl" %(path, model)) is False:
+            weight = prior_models[model]['weight']
+            pow_weight = prior_models[model]['pow_weight']
+            pred = weight * (p1**pow_weight) + (1-weight) * (p2**pow_weight)
+            with open("%s/%s.pred.pkl" %(path, model), 'wb') as f:
+                pickle.dump(pred, f, -1)
+
+    for model in prior_models.keys():
+        model_library.append(model)
+    return model_library
+
+
 
 def ensemble_selection_obj(param, model1_pred, model2_pred, labels, num_valid_matrix):
     weight = param['weight']
@@ -25,7 +88,8 @@ def ensemble_selection_obj(param, model1_pred, model2_pred, labels, num_valid_ma
         for fold in range(config.kfold):
             p1 = model1_pred[iter, fold, :num_valid_matrix[iter, fold]]
             p2 = model2_pred[iter, fold, :num_valid_matrix[iter, fold]]
-            y_pred = (p1 + p2*weight) / (1+weight)
+            #y_pred = (p1 + p2*weight) / (1+weight)
+            y_pred = (1-weight)*p1 + weight*p2
             y_true = labels[iter, fold, :num_valid_matrix[iter, fold]]
             score = Gini(y_true, y_pred)
             gini_cv[iter][fold] = score
@@ -36,8 +100,18 @@ def ensemble_selection_obj(param, model1_pred, model2_pred, labels, num_valid_ma
 def ensemble_selection():
     # load feat, labels and pred
     feat_names = config.feat_names
-
     model_list = config.model_list
+
+    # combine them, and generate whold model_list
+    model_library = []
+    for feat in feat_names:
+        for model in model_list:
+            model_library.append("%s_%s" %(feat, model))
+
+    model_library = add_prior_models(model_library)
+    print model_library
+
+    model_num = len(model_library)
 
     # num valid matrix
     num_valid_matrix = np.zeros((config.kiter, config.kfold), dtype=int)
@@ -56,30 +130,25 @@ def ensemble_selection():
 
     # load all predictions, cross validation
     # compute model's gini cv score
-    #gini_cv = np.zeros((len(feat_name), len(model_list), dtype=float)
     gini_cv = []
-    model_valid_pred = np.zeros((len(feat_names)*len(model_list), config.kiter, config.kfold, maxNumValid), dtype=float)
-    #model_valid_pred = []
+    model_valid_pred = np.zeros((model_num, config.kiter, config.kfold, maxNumValid), dtype=float)
 
-    for feat in range(len(feat_names)):
-        for mid in range(len(model_list)):
-            gini_cv_tmp = np.zeros((config.kiter, config.kfold), dtype=float)
-            for iter in range(config.kiter):
-                for fold in range(config.kfold):
-                    path = "%s/iter%d/fold%d" % (config.data_folder, iter, fold)
-                    pred_file = "%s/%s_%s.pred.pkl" %(path, feat_names[feat], model_list[mid])
-                    with open(pred_file, 'rb') as f:
-                        y_pred = pickle.load(f)
-                    model_valid_pred[feat*len(model_list) + mid][iter][fold][:num_valid_matrix[iter][fold]] = y_pred
-                    #model_valid_pred.append(y_pred)
-                    score = Gini(valid_labels[iter, fold, :num_valid_matrix[iter, fold]], y_pred)
-                    gini_cv_tmp[iter][fold] = score
-            gini_cv.append(np.mean(gini_cv_tmp))
+    for mid in range(model_num):
+        gini_cv_tmp = np.zeros((config.kiter, config.kfold), dtype=float)
+        for iter in range(config.kiter):
+            for fold in range(config.kfold):
+                path = "%s/iter%d/fold%d" % (config.data_folder, iter, fold)
+                pred_file = "%s/%s.pred.pkl" %(path, model_library[mid])
+                with open(pred_file, 'rb') as f:
+                    y_pred = pickle.load(f)
+                model_valid_pred[mid, iter, fold, :num_valid_matrix[iter, fold]] = y_pred
+                score = Gini(valid_labels[iter, fold, :num_valid_matrix[iter, fold]], y_pred)
+                gini_cv_tmp[iter][fold] = score
+        gini_cv.append(np.mean(gini_cv_tmp))
 
     # sort the model by their cv mean score
     gini_cv = np.array(gini_cv)
     sorted_model = gini_cv.argsort()[::-1]
-    # TODO
 
     # boosting ensemble
     # 1. initialization, use the max score model
@@ -87,9 +156,7 @@ def ensemble_selection():
     for iter in range(config.kiter):
         for fold in range(config.kfold):
             model_pred_tmp[iter, fold, :num_valid_matrix[iter][fold]] = model_valid_pred[sorted_model[0], iter, fold, :num_valid_matrix[iter][fold]]
-    fid = sorted_model[0]/len(model_list)
-    mid = sorted_model[0]%len(model_list)
-    print "Init with best model, Gini %f, Model %s - %s" %(np.max(gini_cv), feat_names[fid], model_list[mid])
+    print "Init with best model, Gini %f, Model %s" %(np.max(gini_cv), model_library[sorted_model[0]])
 
     # 2. greedy search
     best_model_list = []
@@ -108,7 +175,7 @@ def ensemble_selection():
 
             obj = lambda param: ensemble_selection_obj(param, model_pred_tmp, model_valid_pred[model], valid_labels, num_valid_matrix)
             param_space = {
-                'weight': hp.quniform('weight', 0, 1, 0.1),
+                'weight': hp.quniform('weight', 0, 1, 0.001),
             }
             trials = Trials()
             best_param = fmin(obj,
@@ -124,21 +191,18 @@ def ensemble_selection():
                     p1 = model_pred_tmp[iter, fold, :num_valid_matrix[iter, fold]]
                     p2 = model_valid_pred[model, iter, fold, :num_valid_matrix[iter, fold]]
                     y_true = valid_labels[iter, fold, :num_valid_matrix[iter, fold]]
-                    y_pred = (p1 + p2*best_w) / (1+best_w)
+                    #y_pred = (p1 + p2*best_w) / (1+best_w)
+                    y_pred = (1-best_w)*p1 + best_w*p2
                     score = Gini(y_true, y_pred)
                     gini_cv_tmp[iter, fold] = score
 
 
-            fid = model/len(model_list)
-            mid = model % len(model_list)
-            print "Iter %d, Gini %f, Model %s - %s, Weight %f" %(ensemble_iter, np.mean(gini_cv_tmp), feat_names[fid], model_list[mid], best_w)
+            print "Iter %d, Gini %f, Model %s, Weight %f" %(ensemble_iter, np.mean(gini_cv_tmp), model_library[model], best_w)
             if np.mean(gini_cv_tmp) > best_gini:
                 best_gini, best_model, best_weight = np.mean(gini_cv_tmp), model, best_w
         if best_model == None:
             break
-        fid = best_model/len(model_list)
-        mid = best_model % len(model_list)
-        print "Iter %d, Gini %f, Model %s - %s, Weight %f" %(ensemble_iter, best_gini, feat_names[fid], model_list[mid], best_weight)
+        print "Best for Iter %d, Gini %f, Model %s, Weight %f" %(ensemble_iter, best_gini, model_library[best_model], best_weight)
         best_weight_list.append(best_weight)
         best_model_list.append(best_model)
 
@@ -147,37 +211,32 @@ def ensemble_selection():
             for fold in range(config.kfold):
                 p1 = model_pred_tmp[iter, fold, :num_valid_matrix[iter, fold]]
                 p2 = model_valid_pred[best_model, iter, fold, :num_valid_matrix[iter, fold]]
-                model_pred_tmp[iter, fold, :num_valid_matrix[iter][fold]] = (p1 + p2*best_weight)/(1+best_weight)
+                model_pred_tmp[iter, fold, :num_valid_matrix[iter][fold]] = (1-best_weight)*p1 + best_weight*p2
 
         best_model = None
 
     # save best model list
     with open("%s/best_model_list" % config.data_folder, 'wb') as f:
-        pickle.dump([sorted_model, best_model_list, best_weight_list], f, -1)
+        pickle.dump([model_library, sorted_model, best_model_list, best_weight_list], f, -1)
 
 def ensemble_prediction():
     # load best model list
     with open("%s/best_model_list" % config.data_folder, 'rb') as f:
-        [sorted_model, best_model_list, best_weight_list] = pickle.load(f)
-
-    model_list = config.model_list
-    feat_names = config.feat_names
+        [model_library, sorted_model, best_model_list, best_weight_list] = pickle.load(f)
 
     # prediction, generate submission file
     path = "%s/all" % config.data_folder
-    fid = sorted_model[0]/len(model_list)
-    mid = sorted_model[0]%len(model_list)
-    with open("%s/%s_%s.pred.pkl" %(path, feat_names[fid], model_list[mid]), 'rb') as f:
+    print "Init with (%s)" %(model_library[sorted_model[0]])
+    with open("%s/%s.pred.pkl" %(path, model_library[sorted_model[0]]), 'rb') as f:
         y_pred = pickle.load(f)
 
     for i in range(len(best_model_list)):
         model = best_model_list[i]
         weight = best_weight_list[i]
-        fid = sorted_model[model]/len(model_list)
-        mid = sorted_model[model]%len(model_list)
-        with open("%s/%s_%s.pred.pkl" %(path, feat_names[fid], model_list[mid]), 'rb') as f:
+        print "(%s), %f" %(model_library[model], weight)
+        with open("%s/%s.pred.pkl" %(path, model_library[model]), 'rb') as f:
             y_pred_tmp = pickle.load(f)
-        y_pred = (y_pred + y_pred_tmp*weight)/(1+weight)
+        y_pred = (1-weight)*y_pred + weight*y_pred_tmp
 
     test = pd.read_csv(config.origin_test_path, index_col=0)
     idx = test.index
@@ -187,6 +246,7 @@ def ensemble_prediction():
 
 if __name__ == "__main__":
     flag = sys.argv[1]
+    print "start ", flag
     if flag == "ensemble":
         ensemble_selection()
     if flag == "submission":
