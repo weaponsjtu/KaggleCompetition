@@ -12,8 +12,6 @@ train = pd.read_csv(config.origin_train_path, header=0)
 test = pd.read_csv(config.origin_test_path, header=0)
 
 y = train['Hazard'].values
-print len(y)
-
 
 skf = [0]*config.kiter
 for i in range(config.kiter):
@@ -22,5 +20,3 @@ for i in range(config.kiter):
 
 with open("%s/fold.pkl" % config.data_folder, 'wb') as f:
     pickle.dump(skf, f, -1)
-
-

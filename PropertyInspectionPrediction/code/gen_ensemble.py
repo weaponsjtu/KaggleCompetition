@@ -7,44 +7,68 @@
 # 2. apply the weight to train/test
 ###
 
+from sklearn.metrics import mean_squared_error as MSE
+
 import cPickle as pickle
 import numpy as np
 import pandas as pd
 import sys,os
 
 from hyperopt import fmin, tpe, hp, Trials, STATUS_OK, pyll
+from hyperopt.mongoexp import MongoTrials
 
 from param import config
 
 from utils import *
 
+
+def ensemble_algorithm(p1, p2, weight):
+    #return (p1 + weight*p2) / (1+weight)
+    return weight*p1 + (1-weight)*p2
+
+def gen_subm(y_pred, filename=None):
+    test = pd.read_csv(config.origin_test_path, index_col=0)
+    idx = test.index
+    preds = pd.DataFrame({"Id": idx, "Hazard": y_pred})
+    preds = preds.set_index("Id")
+    if filename != None:
+        preds.to_csv(filename)
+    else:
+        preds.to_csv("sub/model_library.csv")
+
 def add_prior_models(model_library):
-    prior_models = {
-            'xgboost-art@1': {
-                'weight': 0.463,
-                'pow_weight': 0.01,
-                },
-            'xgboost-art@2': {
-                'weight': 0.463,
-                'pow_weight': 0.8,
-                },
-            'xgboost-art@3': {
-                'weight': 0.45,
-                'pow_weight': 0.31,
-                },
-            'xgboost-art@4': {
-                'weight': 0.463,
-                'pow_weight': 0.98,
-                },
-            'xgboost-art@5': {
-                'weight': 0.463,
-                'pow_weight': 1,
-                },
-            'xgboost-art@6': {
-                'weight': 0.47,
-                'pow_weight': 1,
-                },
-            }
+    #prior_models = {
+    #        'xgboost-art@1': {
+    #            'weight': 0.463,
+    #            'pow_weight': 0.01,
+    #            },
+    #        'xgboost-art@2': {
+    #            'weight': 0.463,
+    #            'pow_weight': 0.8,
+    #            },
+    #        'xgboost-art@3': {
+    #            'weight': 0.463,
+    #            'pow_weight': 0.045,
+    #            'pow_weight1': 0.055,
+    #            },
+    #        'xgboost-art@4': {
+    #            'weight': 0.463,
+    #            'pow_weight': 0.98,
+    #            },
+    #        'xgboost-art@5': {
+    #            'weight': 0.463,
+    #            'pow_weight': 1,
+    #            },
+    #        'xgboost-art@6': {
+    #            'weight': 0.47,
+    #            'pow_weight': 1,
+    #            },
+    #        }
+    prior_models = {}
+    for i in range(1, 5):
+        model = 'xgboost-art@%d'%i
+        prior_models[model] = {'weight': 0.463, 'pow_weight': 0.01 * i}
+
     feat_names = config.feat_names
     model_list = config.model_list
     for iter in range(config.kiter):
@@ -55,12 +79,14 @@ def add_prior_models(model_library):
             with open("%s/dictvec_xgboost-art.pred.pkl" %path, 'rb') as f:
                 p2 = pickle.load(f)
             for model in prior_models.keys():
-                if os.path.exists("%s/%s.pred.pkl" %(path, model)) is False:
-                    weight = prior_models[model]['weight']
-                    pow_weight = prior_models[model]['pow_weight']
-                    pred = weight * (p1**pow_weight) + (1-weight) * (p2**pow_weight)
-                    with open("%s/%s.pred.pkl" %(path, model), 'wb') as f:
-                        pickle.dump(pred, f, -1)
+                weight = prior_models[model]['weight']
+                pow_weight1 = prior_models[model]['pow_weight']
+                pow_weight2 = pow_weight1
+                if prior_models[model].has_key('pow_weight1'):
+                    pow_weight2 = prior_models[model]['pow_weight1']
+                pred = weight * (p1**pow_weight1) + (1-weight) * (p2**pow_weight2)
+                with open("%s/%s.pred.pkl" %(path, model), 'wb') as f:
+                    pickle.dump(pred, f, -1)
 
     path = "%s/all" %(config.data_folder)
     with open("%s/label_encode_xgboost-art.pred.pkl" %path, 'rb') as f:
@@ -68,12 +94,14 @@ def add_prior_models(model_library):
     with open("%s/dictvec_xgboost-art.pred.pkl" %path, 'rb') as f:
         p2 = pickle.load(f)
     for model in prior_models.keys():
-        if os.path.exists("%s/%s.pred.pkl" %(path, model)) is False:
-            weight = prior_models[model]['weight']
-            pow_weight = prior_models[model]['pow_weight']
-            pred = weight * (p1**pow_weight) + (1-weight) * (p2**pow_weight)
-            with open("%s/%s.pred.pkl" %(path, model), 'wb') as f:
-                pickle.dump(pred, f, -1)
+        weight = prior_models[model]['weight']
+        pow_weight1 = prior_models[model]['pow_weight']
+        pow_weight2 = pow_weight1
+        if prior_models[model].has_key('pow_weight1'):
+            pow_weight2 = prior_models[model]['pow_weight1']
+        pred = weight * (p1**pow_weight1) + (1-weight) * (p2**pow_weight2)
+        with open("%s/%s.pred.pkl" %(path, model), 'wb') as f:
+            pickle.dump(pred, f, -1)
 
     for model in prior_models.keys():
         model_library.append(model)
@@ -88,8 +116,8 @@ def ensemble_selection_obj(param, model1_pred, model2_pred, labels, num_valid_ma
         for fold in range(config.kfold):
             p1 = model1_pred[iter, fold, :num_valid_matrix[iter, fold]]
             p2 = model2_pred[iter, fold, :num_valid_matrix[iter, fold]]
-            #y_pred = (p1 + p2*weight) / (1+weight)
-            y_pred = (1-weight)*p1 + weight*p2
+            y_pred = ensemble_algorithm(p1, p2, weight)
+
             y_true = labels[iter, fold, :num_valid_matrix[iter, fold]]
             score = Gini(y_true, y_pred)
             gini_cv[iter][fold] = score
@@ -107,10 +135,11 @@ def ensemble_selection():
     for feat in feat_names:
         for model in model_list:
             model_library.append("%s_%s" %(feat, model))
+            for num in range(1, config.hyper_max_evals+1):
+                model_library.append("%s_%s@%d" %(feat, model, num))
 
-    model_library = add_prior_models(model_library)
+    #model_library = add_prior_models(model_library)
     print model_library
-
     model_num = len(model_library)
 
     # num valid matrix
@@ -169,6 +198,7 @@ def ensemble_selection():
     while True:
         ensemble_iter += 1
         for model in sorted_model:
+            print "ensemble iter %d, model %d" %(ensemble_iter, model)
             # jump for the first max model
             if ensemble_iter == 1 and model == sorted_model[0]:
                 continue
@@ -178,6 +208,7 @@ def ensemble_selection():
                 'weight': hp.quniform('weight', 0, 1, 0.001),
             }
             trials = Trials()
+            #trials = MongoTrials('mongo://172.16.13.7:27017/ensemble/jobs', exp_key='exp%d_%d'%(ensemble_iter, model))
             best_param = fmin(obj,
                 space = param_space,
                 algo = tpe.suggest,
@@ -191,8 +222,7 @@ def ensemble_selection():
                     p1 = model_pred_tmp[iter, fold, :num_valid_matrix[iter, fold]]
                     p2 = model_valid_pred[model, iter, fold, :num_valid_matrix[iter, fold]]
                     y_true = valid_labels[iter, fold, :num_valid_matrix[iter, fold]]
-                    #y_pred = (p1 + p2*best_w) / (1+best_w)
-                    y_pred = (1-best_w)*p1 + best_w*p2
+                    y_pred = ensemble_algorithm(p1, p2, best_w)
                     score = Gini(y_true, y_pred)
                     gini_cv_tmp[iter, fold] = score
 
@@ -214,6 +244,7 @@ def ensemble_selection():
                 model_pred_tmp[iter, fold, :num_valid_matrix[iter][fold]] = (1-best_weight)*p1 + best_weight*p2
 
         best_model = None
+        print 'ensemble iter %d done!!!' % ensemble_iter
 
     # save best model list
     with open("%s/best_model_list" % config.data_folder, 'wb') as f:
@@ -236,13 +267,10 @@ def ensemble_prediction():
         print "(%s), %f" %(model_library[model], weight)
         with open("%s/%s.pred.pkl" %(path, model_library[model]), 'rb') as f:
             y_pred_tmp = pickle.load(f)
-        y_pred = (1-weight)*y_pred + weight*y_pred_tmp
+        y_pred = ensemble_algorithm(y_pred, y_pred_tmp, weight)
 
-    test = pd.read_csv(config.origin_test_path, index_col=0)
-    idx = test.index
-    preds = pd.DataFrame({"Id": idx, "Hazard": y_pred})
-    preds = preds.set_index("Id")
-    preds.to_csv("sub/model_library.csv")
+    gen_subm(y_pred)
+
 
 if __name__ == "__main__":
     flag = sys.argv[1]

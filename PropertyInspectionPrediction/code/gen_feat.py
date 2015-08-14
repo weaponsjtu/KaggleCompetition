@@ -5,6 +5,8 @@ import cPickle as pickle
 from sklearn import preprocessing
 from sklearn.feature_extraction import DictVectorizer
 
+from sklearn_pandas import DataFrameMapper
+
 from param import config
 
 def extract_feature(path, train, test, type, feat_names):
@@ -16,7 +18,8 @@ def extract_feature(path, train, test, type, feat_names):
         test.drop("Hazard", axis=1, inplace=True)
 
 
-    if feat_names.count("label_encode") > 0:
+    if feat_names.count("label") > 0:
+        feat = "label"
         train_s = train.copy()
         test_s = test.copy()
         train_s.drop("T2_V10", axis=1, inplace=True)
@@ -41,25 +44,62 @@ def extract_feature(path, train, test, type, feat_names):
 
         train_s = train_s.astype(float)
         test_s = test_s.astype(float)
-        with open("%s/train.%s.feat.pkl" %(path, "label_encode"), "wb") as f:
+        with open("%s/train.%s.feat.pkl" %(path, feat), "wb") as f:
             pickle.dump([train_s, y_train], f, -1)
-        with open("%s/%s.%s.feat.pkl" %(path, type, "label_encode"), "wb") as f:
+        with open("%s/%s.%s.feat.pkl" %(path, type, feat), "wb") as f:
             pickle.dump([test_s, y_test], f, -1)
 
     if feat_names.count("dictvec") > 0:
+        feat = "dictvec"
         train_s = train.copy()
         test_s = test.copy()
+        train_s.drop("T2_V10", axis=1, inplace=True)
+        train_s.drop("T2_V7", axis=1, inplace=True)
+        train_s.drop("T1_V13", axis=1, inplace=True)
+        train_s.drop("T1_V10", axis=1, inplace=True)
+
+        test_s.drop("T2_V10", axis=1, inplace=True)
+        test_s.drop("T2_V7", axis=1, inplace=True)
+        test_s.drop("T1_V13", axis=1, inplace=True)
+        test_s.drop("T1_V10", axis=1, inplace=True)
+
         train_s = train_s.T.to_dict().values()
         test_s = test_s.T.to_dict().values()
 
         vec = DictVectorizer()
         train_s = vec.fit_transform(train_s)
         test_s = vec.transform(test_s)
-        with open("%s/train.%s.feat.pkl" %(path, "dictvec"), "wb") as f:
+        with open("%s/train.%s.feat.pkl" %(path, feat), "wb") as f:
             pickle.dump([train_s, y_train], f, -1)
-        with open("%s/%s.%s.feat.pkl" %(path, type, "dictvec"), "wb") as f:
+        with open("%s/%s.%s.feat.pkl" %(path, type, feat), "wb") as f:
             pickle.dump([test_s, y_test], f, -1)
 
+    if feat_names.count('standard') > 0:
+        feat = "standard"
+        #concatanate the pandas dataframes
+        temp = pd.concat([train,test])
+
+        #inspired from http://stackoverflow.com/questions/24745879/
+        binaries = ['T1_V6','T1_V17','T2_V3','T2_V11','T2_V12']
+        encoders = ['T1_V4','T1_V5','T1_V7','T1_V8','T1_V9','T1_V11','T1_V12','T1_V15','T1_V16','T2_V5','T2_V13']
+        scalars = ['T1_V1','T1_V2','T1_V3','T1_V10','T1_V13','T1_V14','T2_V1','T2_V2','T2_V4','T2_V6','T2_V7','T2_V8','T2_V9','T2_V10','T2_V14','T2_V15']
+
+        mapper = DataFrameMapper(
+            [(binary, preprocessing.LabelBinarizer()) for binary in binaries] +
+            [(encoder, preprocessing.LabelEncoder()) for encoder in encoders] +
+            [(scalar, preprocessing.StandardScaler()) for scalar in scalars]
+        )
+
+        tempMapped = mapper.fit_transform(temp)
+
+        #split them apart  again
+        train_s = tempMapped[:len(train)]
+        test_s = tempMapped[len(train):]
+
+        with open("%s/train.%s.feat.pkl" %(path, feat), "wb") as f:
+            pickle.dump([train_s, y_train], f, -1)
+        with open("%s/%s.%s.feat.pkl" %(path, type, feat), "wb") as f:
+            pickle.dump([test_s, y_test], f, -1)
 
 
 if __name__ == "__main__":
@@ -72,19 +112,18 @@ if __name__ == "__main__":
         skf = pickle.load(i_f)
 
     # extract features
-    #feat_names = ["label_encode", "dictvec"]
     feat_names = config.feat_names
 
     # for cross validation
-    #print "Extract feature for cross validation"
-    #for iter in range(config.kiter):
-    #    for fold, (validInd, trainInd) in enumerate(skf[iter]):
-    #        path = "%s/iter%d/fold%d" %(config.data_folder, iter, fold)
-    #        sub_train = train.iloc[trainInd].copy()
-    #        sub_val = train.iloc[validInd].copy()
-    #        # extract feature
-    #        extract_feature(path, sub_train, sub_val, "valid", feat_names)
-    #print "Done"
+    print "Extract feature for cross validation"
+    for iter in range(config.kiter):
+        for fold, (validInd, trainInd) in enumerate(skf[iter]):
+            path = "%s/iter%d/fold%d" %(config.data_folder, iter, fold)
+            sub_train = train.iloc[trainInd].copy()
+            sub_val = train.iloc[validInd].copy()
+            # extract feature
+            extract_feature(path, sub_train, sub_val, "valid", feat_names)
+    print "Done"
 
     # for train/test
     print "Extract feature for train/test"

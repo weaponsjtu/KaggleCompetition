@@ -24,9 +24,9 @@ def xgboost_pred(train,labels,test):
     #params['max_delta_step'] = 5  # not exact solution
     #params['lambda'] = 0.9  # L2 regularization, penalty
     #params['alpha'] = 0.9 # L1
-    #params['gamma'] = 6.7
+    #params['gamma'] = 0.3
     #params['lambda_bias'] = 0.7
-    #params['num_round'] = 100 # n_estimators
+    #params['num_round'] = 200 # n_estimators
 
     plst = list(params.items())
 
@@ -72,7 +72,7 @@ def xgboost_pred(train,labels,test):
 
     #combine predictions
     #since the metric only cares about relative rank we don"t need to average
-    preds = preds1*1.4 + preds2*8.6
+    preds = (preds1)*1.5 + (preds2)*8.6
     #preds = preds1*weight + preds2*(1-weight)
     #preds = preds1*preds2
     print 'Gini Score is ', (score1+score2)/2
@@ -129,8 +129,7 @@ def main(flag):
 
     preds2 = xgboost_pred(train,labels,test)
 
-
-    preds = 0.45 * (preds1**0.31) + 0.55 * (preds2**0.31)
+    preds = 0.463 * (preds1**0.01) + 0.537 * (preds2**0.01)
     #preds = preds1*preds2
 
     if flag:
@@ -139,7 +138,7 @@ def main(flag):
     #generate solution
     preds = pd.DataFrame({"Id": test_ind, "Hazard": preds})
     preds = preds.set_index("Id")
-    preds.to_csv("xgboost_benchmark_pow_31.csv")
+    preds.to_csv("wp.csv")
 
 from sklearn.decomposition import PCA
 def pca_wrapper(array):
@@ -149,6 +148,6 @@ def pca_wrapper(array):
 
 
 if __name__ == '__main__':
-    print 'xgb model, pow, label**0.31'
+    print 'xgb model, pow'
     flag = False
     main(flag)
