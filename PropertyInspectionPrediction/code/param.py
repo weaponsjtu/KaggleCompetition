@@ -10,7 +10,7 @@ class ParamConfig:
         self.kfold = 5  # cross validation, k-fold
         self.kiter = 2  # shuffle dataset, and repeat CV
 
-        self.DEBUG = True
+        self.DEBUG = False
         self.hyper_max_evals = 100
 
         self.nthread = 2
@@ -40,16 +40,15 @@ class ParamConfig:
 
         #self.model_list = ['linear', 'logistic', 'svr', 'ranksvm', 'rf', 'extratree', 'gbf', 'xgboost', 'knn', 'dnn']
 
-        self.model_list = ['xgb_rank'] #'xgb_linear', 'xgb_tree'] #, 'rf', 'xgboost', 'gbf']
-        self.update_model = ['xgboost-art']
-        self.model_type = 'xgboost'
+        self.model_list = ['logistic', 'knn', 'ridge', 'lasso', 'xgb_rank', 'xgb_linear', 'xgb_tree', 'xgb_multi', 'rf', 'gbf']
+        self.update_model = ['']
+        self.model_type = ''
         self.param_spaces = {
-            'linear': {
-            },
             'logistic': {
+                'C': hp.loguniform('C', np.log(0.001), np.log(10)),
             },
             'knn': {
-                'n_neighbors': pyll.scope.int(hp.quniform('n_neighbors', 2, 10, 1)),
+                'n_neighbors': pyll.scope.int(hp.quniform('n_neighbors', 2, 1024, 2)),
                 #'weights': hp.choice('weights', ['uniform', 'distance']),
                 'weights': 'distance',
             },
@@ -60,17 +59,37 @@ class ParamConfig:
                 'alpha': hp.loguniform('alpha', np.log(0.00001), np.log(0.1)),
             },
             'rf': {
-                'n_estimators': pyll.scope.int(hp.quniform('n_estimators', 100, 1000, 100)),
+                'n_estimators': pyll.scope.int(hp.quniform('n_estimators', 100, 500, 10)),
+                'max_features': hp.quniform('max_features', 0.05, 1.0, 0.05),
             },
             'extratree': {
-                'n_estimators': pyll.scope.int(hp.quniform('n_estimators', 100, 1000, 100)),
+                'n_estimators': pyll.scope.int(hp.quniform('n_estimators', 100, 500, 10)),
+                'max_features': hp.quniform('max_features', 0.05, 1.0, 0.05),
             },
             'gbf': {
-                'n_estimators': pyll.scope.int(hp.quniform('n_estimators', 100, 1000, 100)),
+                'n_estimators': pyll.scope.int(hp.quniform('n_estimators', 100, 500, 10)),
+                'max_features': hp.quniform('max_features', 0.05, 1.0, 0.05),
+                'learning_rate': hp.quniform('learning_rate', 0.01, 0.5, 0.01),
+                'max_depth': hp.quniform('max_depth', 1, 15, 1),
+                'subsample': hp.quniform('subsample', 0.5, 1.0, 0.1),
             },
             'svr': {
                 'C': hp.quniform('C', 0.1, 10, 0.1),
                 'epsilon': hp.loguniform('epsilon', np.log(0.001), np.log(0.1)),
+            },
+            'xgb_multi': {
+                'booster': 'gblinear',
+                'objective': 'multi:softmax',
+                'eta' : hp.quniform('eta', 0.01, 1, 0.01),
+                'lambda' : hp.quniform('lambda', 0, 5, 0.05),
+                'alpha' : hp.quniform('alpha', 0, 0.5, 0.005),
+                'lambda_bias' : hp.quniform('lambda_bias', 0, 3, 0.1),
+                'num_rounds' : 10000,
+                'num_class': 69,
+                'silent' : 1,
+                'verbose': 0,
+                'early_stopping_rounds': 120,
+                'nthread': 1,
             },
             'xgb_rank': {
                 'objective': 'rank:pairwise',
@@ -80,7 +99,9 @@ class ParamConfig:
                 'lambda_bias' : hp.quniform('lambda_bias', 0, 3, 0.1),
                 'num_rounds' : 10000,
                 'silent' : 1,
+                'verbose': 0,
                 'early_stopping_rounds': 120,
+                'nthread': 1,
             },
             'xgb_linear': {
                 'booster': 'gblinear',
@@ -91,7 +112,9 @@ class ParamConfig:
                 'lambda_bias' : hp.quniform('lambda_bias', 0, 3, 0.1),
                 'num_rounds' : 10000,
                 'silent' : 1,
+                'verbose': 0,
                 'early_stopping_rounds': 120,
+                'nthread': 1,
             },
             'xgb_tree': {
                 'booster': 'gbtree',
@@ -106,6 +129,7 @@ class ParamConfig:
                 'max_depth': pyll.scope.int(hp.quniform('max_depth', 1, 10, 1)),
                 'num_rounds': 10000,
                 'early_stopping_rounds': 120,
+                'nthread': 1,
             },
             'xgboost-art': {
                 #'booster': 'gbtree',

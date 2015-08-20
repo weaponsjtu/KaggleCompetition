@@ -124,6 +124,17 @@ def ensemble_selection_obj(param, model1_pred, model2_pred, labels, num_valid_ma
     gini_mean = np.mean(gini_cv)
     return -gini_mean
 
+def check_model(model_name):
+    for iter in range(config.kiter):
+        for fold in range(config.kfold):
+            if os.path.exists('%s/iter%d/fold%d/%s.pred.pkl' %(config.data_folder, iter, fold, model_name)) is False:
+                return False
+
+    if os.path.exists('%s/all/%s.pred.pkl' %(config.data_folder, model_name)) is False:
+        return False
+
+    return True
+
 
 def ensemble_selection():
     # load feat, labels and pred
@@ -134,9 +145,12 @@ def ensemble_selection():
     model_library = []
     for feat in feat_names:
         for model in model_list:
-            model_library.append("%s_%s" %(feat, model))
+            if check_model("%s_%s"%(feat, model)):
+                model_library.append("%s_%s" %(feat, model))
             for num in range(1, config.hyper_max_evals+1):
-                model_library.append("%s_%s@%d" %(feat, model, num))
+                model_name = "%s_%s@%d" %(feat, model, num)
+                if check_model(model_name):
+                    model_library.append(model_name)
 
     #model_library = add_prior_models(model_library)
     print model_library
