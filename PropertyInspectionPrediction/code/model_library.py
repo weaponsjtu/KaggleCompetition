@@ -48,7 +48,10 @@ def deep_model():
 
 def train_model(path, x_train, y_train, x_test, y_test, feat, param_best_dic):
 
-    model_list = config.model_list
+    model_list = []
+    for model in config.model_list:
+        if param_best_dic.has_key("%s_%s"%(feat, model)):
+            model_list.append(model)
     ######
     # approach different model
     # Deep Learning Model
@@ -250,8 +253,8 @@ def train_model(path, x_train, y_train, x_test, y_test, feat, param_best_dic):
                 pickle.dump(pred_val, f, -1)
             print "Done!"
 
-    if model_list.count('xgboost-art') > 0:
-        model_type = 'xgboost-art'
+    if model_list.count('xgb_art') > 0:
+        model_type = 'xgb_art'
         pred_file = "%s/%s_%s.pred.pkl" %(path, feat, model_type)
         if config.update_model.count(model_type) > 0 or os.path.exists(pred_file) is False:
             print "%s trainning..." % model_type
@@ -538,7 +541,7 @@ def hyperopt_library(model_type, model_param, x_train, y_train, x_test, y_test):
             model = xgb.train(params, xgtrain, num_rounds, watchlist, early_stopping_rounds=120)
             pred_val = model.predict( xgval, ntree_limit=model.best_iteration )
 
-        if model_type.count('xgboost-art') > 0:
+        if model_type.count('xgb_art') > 0:
             print "%s trainning..." % model_type
             params = model_param
             num_rounds = model_param['num_rounds']
@@ -621,7 +624,10 @@ def hyperopt_main():
                 trials = Trials()
                 #trials = MongoTrials('mongo://172.16.13.7/hazard/jobs', exp_key='exp%d'%trials_counter)
                 obj = lambda p: hyperopt_wrapper(p, model, feat)
-                best_params = fmin(obj, model_param, algo=tpe.suggest, trials=trials, max_evals=config.hyper_max_evals)
+                tmp_max_evals = config.hyper_max_evals
+                if model.count('xgb_art') > 0:
+                    tmp_max_evals = 1
+                best_params = fmin(obj, model_param, algo=tpe.suggest, trials=trials, max_evals=tmp_max_evals)
                 print best_params
                 param_best_dic[model_key] = best_params
 

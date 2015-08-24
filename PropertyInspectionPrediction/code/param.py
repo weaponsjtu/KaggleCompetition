@@ -4,6 +4,8 @@ from hyperopt import hp, pyll
 
 import numpy as np
 
+import multiprocessing
+
 class ParamConfig:
     def __init__(self, data_folder):
         # (3,3), (2, 5), (5, 2)
@@ -14,6 +16,7 @@ class ParamConfig:
         self.hyper_max_evals = 100
 
         self.nthread = 2
+        self.max_core = multiprocessing.cpu_count()
 
         if self.DEBUG:
             self.hyper_max_evals = 5
@@ -38,9 +41,9 @@ class ParamConfig:
                 if not os.path.exists(path):
                     os.makedirs(path)
 
-        #self.model_list = ['linear', 'logistic', 'svr', 'ranksvm', 'rf', 'extratree', 'gbf', 'xgboost', 'knn', 'dnn']
+        #self.model_list = ['logistic', 'knn', 'ridge', 'lasso', 'xgb_rank', 'xgb_linear', 'xgb_tree', 'xgb_multi', 'rf', 'gbf']
 
-        self.model_list = ['logistic', 'knn', 'ridge', 'lasso', 'xgb_rank', 'xgb_linear', 'xgb_tree', 'xgb_multi', 'rf', 'gbf']
+        self.model_list = ['logistic', 'knn', 'ridge', 'lasso', 'xgb_rank', 'xgb_linear', 'xgb_tree', 'xgb_art', 'rf', 'gbf']
         self.update_model = ['']
         self.model_type = ''
         self.param_spaces = {
@@ -131,7 +134,7 @@ class ParamConfig:
                 'early_stopping_rounds': 120,
                 'nthread': 1,
             },
-            'xgboost-art': {
+            'xgb_art': {
                 #'booster': 'gbtree',
                 'objective': 'reg:linear',
                 #'n_estimators': pyll.scope.int(hp.quniform('n_estimators', 100, 1000, 100)),
@@ -147,6 +150,7 @@ class ParamConfig:
                 'num_rounds': 10000,
                 'valid_size': 0.07843291,
                 'early_stopping_rounds': 120,
+                'nthread': 1,
             },
         }
         self.best_param = {

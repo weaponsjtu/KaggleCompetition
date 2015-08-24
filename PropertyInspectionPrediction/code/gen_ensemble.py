@@ -12,7 +12,8 @@ from sklearn.metrics import mean_squared_error as MSE
 import cPickle as pickle
 import numpy as np
 import pandas as pd
-import sys,os
+import sys,os,time
+import multiprocessing
 
 from hyperopt import fmin, tpe, hp, Trials, STATUS_OK, pyll
 from hyperopt.mongoexp import MongoTrials
@@ -21,10 +22,6 @@ from param import config
 
 from utils import *
 
-
-def ensemble_algorithm(p1, p2, weight):
-    #return (p1 + weight*p2) / (1+weight)
-    return weight*p1 + (1-weight)*p2
 
 def gen_subm(y_pred, filename=None):
     test = pd.read_csv(config.origin_test_path, index_col=0)
@@ -108,6 +105,10 @@ def add_prior_models(model_library):
     return model_library
 
 
+def ensemble_algorithm(p1, p2, weight):
+    #return (p1 + weight*p2) / (1+weight)
+    return weight*p1 + (1-weight)*p2
+
 
 def ensemble_selection_obj(param, model1_pred, model2_pred, labels, num_valid_matrix):
     weight = param['weight']
@@ -124,6 +125,7 @@ def ensemble_selection_obj(param, model1_pred, model2_pred, labels, num_valid_ma
     gini_mean = np.mean(gini_cv)
     return -gini_mean
 
+# check if we have generate every prediction for this model
 def check_model(model_name):
     for iter in range(config.kiter):
         for fold in range(config.kfold):
@@ -154,6 +156,7 @@ def ensemble_selection():
 
     #model_library = add_prior_models(model_library)
     print model_library
+    print len(model_library)
     model_num = len(model_library)
 
     # num valid matrix
@@ -205,45 +208,80 @@ def ensemble_selection():
     best_model_list = []
     best_weight_list = []
 
-    best_gini = np.max(gini_cv)
-    best_weight = None
-    best_model = None
+    if config.nthread > 1:
+        manager = multiprocessing.Manager()
+        best_gini_tmp = manager.list()
+        best_gini_tmp.append( np.max(gini_cv) )
+        best_weight_tmp = manager.list()
+        best_weight_tmp.append(-1)
+        best_model_tmp = manager.list()
+        best_model_tmp.append(-1)
+    else:
+        best_gini = np.max(gini_cv)
+        best_weight = None
+        best_model = None
     ensemble_iter = 0
     while True:
         ensemble_iter += 1
-        for model in sorted_model:
-            print "ensemble iter %d, model %d" %(ensemble_iter, model)
-            # jump for the first max model
-            if ensemble_iter == 1 and model == sorted_model[0]:
-                continue
+        if config.nthread > 1:
+            model_id = 0
+            while model_id < len(sorted_model):
+                mp_list = []
+                for i in range(model_id, min(len(sorted_model), model_id + config.max_core)):
+                    mp = EnsembleProcess(ensemble_iter, i , model_library, sorted_model, model_pred_tmp, model_valid_pred, valid_labels, num_valid_matrix, best_gini_tmp, best_weight_tmp, best_model_tmp)
+                    mp_list.append(mp)
 
-            obj = lambda param: ensemble_selection_obj(param, model_pred_tmp, model_valid_pred[model], valid_labels, num_valid_matrix)
-            param_space = {
-                'weight': hp.quniform('weight', 0, 1, 0.001),
-            }
-            trials = Trials()
-            #trials = MongoTrials('mongo://172.16.13.7:27017/ensemble/jobs', exp_key='exp%d_%d'%(ensemble_iter, model))
-            best_param = fmin(obj,
-                space = param_space,
-                algo = tpe.suggest,
-                max_evals = 100,
-                trials = trials)
-            best_w = best_param['weight']
+                model_id += config.max_core
 
-            gini_cv_tmp = np.zeros((config.kiter, config.kfold), dtype=float)
-            for iter in range(config.kiter):
-                for fold in range(config.kfold):
-                    p1 = model_pred_tmp[iter, fold, :num_valid_matrix[iter, fold]]
-                    p2 = model_valid_pred[model, iter, fold, :num_valid_matrix[iter, fold]]
-                    y_true = valid_labels[iter, fold, :num_valid_matrix[iter, fold]]
-                    y_pred = ensemble_algorithm(p1, p2, best_w)
-                    score = Gini(y_true, y_pred)
-                    gini_cv_tmp[iter, fold] = score
+                for mp in mp_list:
+                    mp.start()
+
+                for mp in mp_list:
+                    mp.join()
+
+            best_gini = best_gini_tmp[0]
+            best_weight = best_weight_tmp[0]
+            best_model = best_model_tmp[0]
+            if best_model == -1:
+                best_model = None
+
+            # TODO
+        else:
+            for model in sorted_model:
+                print "ensemble iter %d, model (%d, %s)" %(ensemble_iter, model, model_library[model])
+                # jump for the first max model
+                if ensemble_iter == 1 and model == sorted_model[0]:
+                    continue
+
+                obj = lambda param: ensemble_selection_obj(param, model_pred_tmp, model_valid_pred[model], valid_labels, num_valid_matrix)
+                param_space = {
+                    'weight': hp.quniform('weight', 0, 1, 0.001),
+                }
+                trials = Trials()
+                #trials = MongoTrials('mongo://172.16.13.7:27017/ensemble/jobs', exp_key='exp%d_%d'%(ensemble_iter, model))
+                best_param = fmin(obj,
+                    space = param_space,
+                    algo = tpe.suggest,
+                    max_evals = 100,
+                    trials = trials)
+                best_w = best_param['weight']
+
+                gini_cv_tmp = np.zeros((config.kiter, config.kfold), dtype=float)
+                for iter in range(config.kiter):
+                    for fold in range(config.kfold):
+                        p1 = model_pred_tmp[iter, fold, :num_valid_matrix[iter, fold]]
+                        p2 = model_valid_pred[model, iter, fold, :num_valid_matrix[iter, fold]]
+                        y_true = valid_labels[iter, fold, :num_valid_matrix[iter, fold]]
+                        y_pred = ensemble_algorithm(p1, p2, best_w)
+                        score = Gini(y_true, y_pred)
+                        gini_cv_tmp[iter, fold] = score
 
 
-            print "Iter %d, Gini %f, Model %s, Weight %f" %(ensemble_iter, np.mean(gini_cv_tmp), model_library[model], best_w)
-            if np.mean(gini_cv_tmp) > best_gini:
-                best_gini, best_model, best_weight = np.mean(gini_cv_tmp), model, best_w
+                print "Iter %d, Gini %f, Model %s, Weight %f" %(ensemble_iter, np.mean(gini_cv_tmp), model_library[model], best_w)
+                if (np.mean(gini_cv_tmp) - best_gini) >= 0.000001:
+                    best_gini, best_model, best_weight = np.mean(gini_cv_tmp), model, best_w
+                #### single process
+
         if best_model == None:
             break
         print "Best for Iter %d, Gini %f, Model %s, Weight %f" %(ensemble_iter, best_gini, model_library[best_model], best_weight)
@@ -255,14 +293,14 @@ def ensemble_selection():
             for fold in range(config.kfold):
                 p1 = model_pred_tmp[iter, fold, :num_valid_matrix[iter, fold]]
                 p2 = model_valid_pred[best_model, iter, fold, :num_valid_matrix[iter, fold]]
-                model_pred_tmp[iter, fold, :num_valid_matrix[iter][fold]] = (1-best_weight)*p1 + best_weight*p2
+                model_pred_tmp[iter, fold, :num_valid_matrix[iter][fold]] = ensemble_algorithm(p1, p2, best_weight)
 
         best_model = None
         print 'ensemble iter %d done!!!' % ensemble_iter
 
-    # save best model list
-    with open("%s/best_model_list" % config.data_folder, 'wb') as f:
-        pickle.dump([model_library, sorted_model, best_model_list, best_weight_list], f, -1)
+        # save best model list, every iteration
+        with open("%s/best_model_list" % config.data_folder, 'wb') as f:
+            pickle.dump([model_library, sorted_model, best_model_list, best_weight_list], f, -1)
 
 def ensemble_prediction():
     # load best model list
@@ -283,13 +321,70 @@ def ensemble_prediction():
             y_pred_tmp = pickle.load(f)
         y_pred = ensemble_algorithm(y_pred, y_pred_tmp, weight)
 
+    # generate submission finally
     gen_subm(y_pred)
+
+class EnsembleProcess(multiprocessing.Process):
+    def __init__(self, ensemble_iter, model, model_library, sorted_model, model_pred_tmp, model_valid_pred, valid_labels, num_valid_matrix, best_gini, best_weight, best_model):
+        multiprocessing.Process.__init__(self)
+        self.ensemble_iter = ensemble_iter
+        self.model = model
+        self.model_library = model_library
+        self.sorted_model = sorted_model
+        self.model_pred_tmp = model_pred_tmp
+        self.model_valid_pred = model_valid_pred
+        self.valid_labels = valid_labels
+        self.num_valid_matrix = num_valid_matrix
+        self.best_gini = best_gini
+        self.best_weight = best_weight
+        self.best_model = best_model
+
+    def run(self):
+        print "ensemble iter %d, model (%d, %s)" %(self.ensemble_iter, self.model, self.model_library[self.model])
+        # jump for the first max model
+        if self.ensemble_iter == 1 and self.model == self.sorted_model[0]:
+            return
+
+        obj = lambda param: ensemble_selection_obj(param, self.model_pred_tmp, self.model_valid_pred[self.model], self.valid_labels, self.num_valid_matrix)
+        param_space = {
+            'weight': hp.quniform('weight', 0, 1, 0.001),
+        }
+        trials = Trials()
+        #trials = MongoTrials('mongo://172.16.13.7:27017/ensemble/jobs', exp_key='exp%d_%d'%(ensemble_iter, model))
+        best_param = fmin(obj,
+            space = param_space,
+            algo = tpe.suggest,
+            max_evals = 100,
+            trials = trials)
+        best_w = best_param['weight']
+
+        gini_cv_tmp = np.zeros((config.kiter, config.kfold), dtype=float)
+        for iter in range(config.kiter):
+            for fold in range(config.kfold):
+                p1 = self.model_pred_tmp[iter, fold, :self.num_valid_matrix[iter, fold]]
+                p2 = self.model_valid_pred[self.model, iter, fold, :self.num_valid_matrix[iter, fold]]
+                y_true = self.valid_labels[iter, fold, :self.num_valid_matrix[iter, fold]]
+                y_pred = ensemble_algorithm(p1, p2, best_w)
+                score = Gini(y_true, y_pred)
+                gini_cv_tmp[iter, fold] = score
+
+
+        print "Iter %d, Gini %f, Model %s, Weight %f" %(self.ensemble_iter, np.mean(gini_cv_tmp), self.model_library[self.model], best_w)
+        if (np.mean(gini_cv_tmp) - self.best_gini[0]) >= 0.000001:
+            self.best_gini[0], self.best_model[0], self.best_weight[0] = np.mean(gini_cv_tmp), self.model, best_w
+
 
 
 if __name__ == "__main__":
+    start_time = time.time()
+
     flag = sys.argv[1]
     print "start ", flag
+    print "Code start at %s" %time.ctime()
     if flag == "ensemble":
         ensemble_selection()
     if flag == "submission":
         ensemble_prediction()
+
+    end_time = time.time()
+    print "cost time %f" %( (end_time - start_time)/1000 )
