@@ -14,12 +14,14 @@ class ParamConfig:
 
         self.DEBUG = False
         self.hyper_max_evals = 100
+        self.ensemble_max_evals = 50
 
         self.nthread = 2
         self.max_core = multiprocessing.cpu_count()
 
         if self.DEBUG:
             self.hyper_max_evals = 5
+            self.ensemble_max_evals = 5
 
         self.origin_train_path = "../data/train.csv"
         self.origin_test_path = "../data/test.csv"
@@ -42,8 +44,8 @@ class ParamConfig:
                     os.makedirs(path)
 
         #self.model_list = ['logistic', 'knn', 'ridge', 'lasso', 'xgb_rank', 'xgb_linear', 'xgb_tree', 'xgb_multi', 'rf', 'gbf']
-
         self.model_list = ['logistic', 'knn', 'ridge', 'lasso', 'xgb_rank', 'xgb_linear', 'xgb_tree', 'xgb_art', 'rf', 'gbf']
+
         self.update_model = ['']
         self.model_type = ''
         self.param_spaces = {
@@ -138,15 +140,15 @@ class ParamConfig:
                 #'booster': 'gbtree',
                 'objective': 'reg:linear',
                 #'n_estimators': pyll.scope.int(hp.quniform('n_estimators', 100, 1000, 100)),
-                'eta': 0.005, #hp.quniform('eta', 0.01, 1, 0.001),
-                #'gamma': hp.quniform('gamma', 0, 2, 0.1),
-                'min_child_weight': 6, #pyll.scope.int( hp.quniform('min_child_weight', 0, 10, 1) ),
-                'subsample': 0.7, #hp.quniform('subsample', 0.7, 0.9, 0.05),
-                'colsample_bytree': 0.7,
+                'eta': hp.quniform('eta', 0.01, 1, 0.001),
+                'gamma': hp.quniform('gamma', 0, 2, 0.1),
+                'min_child_weight': pyll.scope.int( hp.quniform('min_child_weight', 0, 10, 1) ),
+                'subsample': hp.quniform('subsample', 0.5, 0.9, 0.05),
+                'colsample_bytree': hp.quniform('colsample_bytree', 0.1, 1, 0.1),
                 'scale_pos_weight': 1,
                 'silent': 1,
                 'verbose': 0,
-                'max_depth': 9, #pyll.scope.int(hp.quniform('max_depth', 1, 10, 1)),
+                'max_depth': pyll.scope.int(hp.quniform('max_depth', 1, 10, 1)),
                 'num_rounds': 10000,
                 'valid_size': 0.07843291,
                 'early_stopping_rounds': 120,

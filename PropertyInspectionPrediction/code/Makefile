@@ -1,5 +1,5 @@
 all:
-	echo "fold, featu, [model, opt], [ensemble, subm], show"
+	echo "fold, featu, [model, opt], [ensemble, stack, subm], show"
 
 fold:
 	python gen_fold.py
@@ -12,6 +12,9 @@ model:
 
 opt:
 	python model_library.py "hyperopt" | tee -a log/hyperopt.log
+
+stack:
+	python gen_ensemble.py "stacking" | tee -a log/stacking.log
 
 ensemble:
 	python gen_ensemble.py "ensemble" | tee -a log/ensemble.log

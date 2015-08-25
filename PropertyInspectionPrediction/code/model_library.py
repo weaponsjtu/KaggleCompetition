@@ -625,8 +625,6 @@ def hyperopt_main():
                 #trials = MongoTrials('mongo://172.16.13.7/hazard/jobs', exp_key='exp%d'%trials_counter)
                 obj = lambda p: hyperopt_wrapper(p, model, feat)
                 tmp_max_evals = config.hyper_max_evals
-                if model.count('xgb_art') > 0:
-                    tmp_max_evals = 1
                 best_params = fmin(obj, model_param, algo=tpe.suggest, trials=trials, max_evals=tmp_max_evals)
                 print best_params
                 param_best_dic[model_key] = best_params

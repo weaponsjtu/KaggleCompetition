@@ -8,6 +8,7 @@
 ###
 
 from sklearn.metrics import mean_squared_error as MSE
+from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
 
 import cPickle as pickle
 import numpy as np
@@ -138,7 +139,7 @@ def check_model(model_name):
     return True
 
 
-def ensemble_selection():
+def gen_model_library():
     # load feat, labels and pred
     feat_names = config.feat_names
     model_list = config.model_list
@@ -155,8 +156,15 @@ def ensemble_selection():
                     model_library.append(model_name)
 
     #model_library = add_prior_models(model_library)
-    print model_library
-    print len(model_library)
+    return model_library
+
+def ensemble_selection():
+    # load feat, labels and pred
+    feat_names = config.feat_names
+    model_list = config.model_list
+
+    # load model library
+    model_library = gen_model_library()
     model_num = len(model_library)
 
     # num valid matrix
@@ -222,8 +230,10 @@ def ensemble_selection():
         best_model = None
     ensemble_iter = 0
     while True:
+        iter_time = time.time()
         ensemble_iter += 1
         if config.nthread > 1:
+            best_model_tmp[0] = -1
             model_id = 0
             while model_id < len(sorted_model):
                 mp_list = []
@@ -255,14 +265,14 @@ def ensemble_selection():
 
                 obj = lambda param: ensemble_selection_obj(param, model_pred_tmp, model_valid_pred[model], valid_labels, num_valid_matrix)
                 param_space = {
-                    'weight': hp.quniform('weight', 0, 1, 0.001),
+                    'weight': hp.quniform('weight', 0, 1, 0.01),
                 }
                 trials = Trials()
                 #trials = MongoTrials('mongo://172.16.13.7:27017/ensemble/jobs', exp_key='exp%d_%d'%(ensemble_iter, model))
                 best_param = fmin(obj,
                     space = param_space,
                     algo = tpe.suggest,
-                    max_evals = 100,
+                    max_evals = config.ensemble_max_evals,
                     trials = trials)
                 best_w = best_param['weight']
 
@@ -296,7 +306,7 @@ def ensemble_selection():
                 model_pred_tmp[iter, fold, :num_valid_matrix[iter][fold]] = ensemble_algorithm(p1, p2, best_weight)
 
         best_model = None
-        print 'ensemble iter %d done!!!' % ensemble_iter
+        print 'ensemble iter %d done!!!, cost time is %s' % (ensemble_iter, time.time() - iter_time)
 
         # save best model list, every iteration
         with open("%s/best_model_list" % config.data_folder, 'wb') as f:
@@ -347,14 +357,14 @@ class EnsembleProcess(multiprocessing.Process):
 
         obj = lambda param: ensemble_selection_obj(param, self.model_pred_tmp, self.model_valid_pred[self.model], self.valid_labels, self.num_valid_matrix)
         param_space = {
-            'weight': hp.quniform('weight', 0, 1, 0.001),
+            'weight': hp.quniform('weight', 0, 1, 0.01),
         }
         trials = Trials()
         #trials = MongoTrials('mongo://172.16.13.7:27017/ensemble/jobs', exp_key='exp%d_%d'%(ensemble_iter, model))
         best_param = fmin(obj,
             space = param_space,
             algo = tpe.suggest,
-            max_evals = 100,
+            max_evals = config.ensemble_max_evals,
             trials = trials)
         best_w = best_param['weight']
 
@@ -374,6 +384,59 @@ class EnsembleProcess(multiprocessing.Process):
             self.best_gini[0], self.best_model[0], self.best_weight[0] = np.mean(gini_cv_tmp), self.model, best_w
 
 
+# stacking
+def model_stacking():
+    # load data
+    train = pd.read_csv(config.origin_train_path, index_col=0)
+    test = pd.read_csv(config.origin_test_path, index_col=0)
+
+    x_label = train['Hazard'].values
+    x_label = stretch_lr(x_label)
+    y_len = len(list(test.index))
+
+
+    model_library = gen_model_library()
+    if model_library.count('label_xgb_art@24') > 0:
+        print 'label_xgb_art@24'
+    print len(model_library)
+    model_library = [ 'label_xgb_art@24' ]
+    print model_library
+    blend_train = np.zeros((len(x_label), len(model_library), config.kiter))
+    blend_test = np.zeros((y_len, len(model_library)))
+
+    # load kfold object
+    with open("%s/fold.pkl" % config.data_folder, 'rb') as i_f:
+        skf = pickle.load(i_f)
+    i_f.close()
+
+    for iter in range(config.kiter):
+        for i in range(len(model_library)):
+            for j, (validInd, trainInd) in enumerate(skf[iter]):
+                path = "%s/iter%d/fold%d/%s.pred.pkl" %(config.data_folder, iter, j, model_library[i])
+                with open(path, 'rb') as f:
+                    y_pred = pickle.load(f)
+                f.close()
+                blend_train[validInd, i, iter] = y_pred
+
+
+    for i in range(len(model_library)):
+        path = "%s/all/%s.pred.pkl" %(config.data_folder, model_library[i])
+        with open(path, 'rb') as f:
+            y_pred = pickle.load(f)
+        f.close()
+        blend_test[:, i] = y_pred
+
+    print "Blending..."
+    clf = LogisticRegression()
+    y_sub = np.zeros((y_len))
+    for iter in range(config.kiter):
+        clf.fit(blend_train[:, :, iter], x_label)
+        y_pred = clf.predict(blend_test)
+        y_sub += y_pred
+    y_sub = y_sub / config.kiter
+    gen_subm(y_sub, 'sub/model_stack.csv')
+    #TODO
+
 
 if __name__ == "__main__":
     start_time = time.time()
@@ -385,6 +448,8 @@ if __name__ == "__main__":
         ensemble_selection()
     if flag == "submission":
         ensemble_prediction()
+    if flag == "stacking":
+        model_stacking()
 
     end_time = time.time()
     print "cost time %f" %( (end_time - start_time)/1000 )
