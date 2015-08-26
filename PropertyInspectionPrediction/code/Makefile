@@ -14,7 +14,7 @@ opt:
 	python model_library.py "hyperopt" | tee -a log/hyperopt.log
 
 stack:
-	python gen_ensemble.py "stacking" | tee -a log/stacking.log
+	python gen_stacking.py | tee -a log/stacking.log
 
 ensemble:
 	python gen_ensemble.py "ensemble" | tee -a log/ensemble.log

@@ -3,6 +3,7 @@ import numpy as np
 from sklearn import preprocessing
 import xgboost as xgb
 from sklearn.feature_extraction import DictVectorizer
+import cPickle as pickle
 
 
 from hyperopt import hp
@@ -72,7 +73,7 @@ def xgboost_pred(train,labels,test):
 
     #combine predictions
     #since the metric only cares about relative rank we don"t need to average
-    preds = (preds1)*1.5 + (preds2)*8.6
+    preds = (preds1)*1.5 + (preds2)*8.5
     #preds = preds1*weight + preds2*(1-weight)
     #preds = preds1*preds2
     print 'Gini Score is ', (score1+score2)/2
@@ -116,6 +117,7 @@ def main(flag):
     train_s = train_s.astype(float)
     test_s = test_s.astype(float)
 
+    #train_s, test_s = add_features(train_s, test_s)
     preds1 = xgboost_pred(train_s,labels,test_s)
 
     #model_2 building
@@ -127,6 +129,8 @@ def main(flag):
     train = vec.fit_transform(train)
     test = vec.transform(test)
 
+
+    #train, test = add_features(train, test)
     preds2 = xgboost_pred(train,labels,test)
 
     preds = 0.463 * (preds1**0.01) + 0.537 * (preds2**0.01)
@@ -138,13 +142,39 @@ def main(flag):
     #generate solution
     preds = pd.DataFrame({"Id": test_ind, "Hazard": preds})
     preds = preds.set_index("Id")
-    preds.to_csv("wp.csv")
+    preds.to_csv("xgb_art.csv")
 
 from sklearn.decomposition import PCA
 def pca_wrapper(array):
     pca = PCA(n_components=2)
     array = pca.fit(array)
     return array
+
+def add_features(train, test):
+    if type(train) != np.ndarray:
+        train = train.toarray()
+
+    if type(test) != np.ndarray:
+        test = test.toarray()
+
+    with open('train_feature_engineered.pkl') as f:
+        df_train = pickle.load(f)
+    with open('test_feature_engineered.pkl') as f:
+        df_test = pickle.load(f)
+
+    feats = ['meanH_N_1', 'meanH_N_2', 'meanH_N_4', 'meanH_N_8']
+    new_feature = np.zeros(( len(df_train.index), 4 ), dtype=float)
+    for i in range(4):
+        new_feature[:, i] = df_train[ feats[i] ].values
+    train = np.append(train, new_feature, 1)
+
+    new_feature = np.zeros(( len(df_test.index), 4 ), dtype=float)
+    for i in range(4):
+        new_feature[:, i] = df_test[ feats[i] ].values
+    test = np.append(test, new_feature, 1)
+    print "add new feature done!!!"
+
+    return train, test
 
 
 if __name__ == '__main__':

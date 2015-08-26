@@ -541,7 +541,7 @@ def hyperopt_library(model_type, model_param, x_train, y_train, x_test, y_test):
             model = xgb.train(params, xgtrain, num_rounds, watchlist, early_stopping_rounds=120)
             pred_val = model.predict( xgval, ntree_limit=model.best_iteration )
 
-        if model_type.count('xgb_art') > 0:
+        if model_type.count('xgb_art') > 0 or model_type.count('xgb_fix') > 0:
             print "%s trainning..." % model_type
             params = model_param
             num_rounds = model_param['num_rounds']

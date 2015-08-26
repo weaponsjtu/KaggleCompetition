@@ -108,7 +108,10 @@ def add_prior_models(model_library):
 
 def ensemble_algorithm(p1, p2, weight):
     #return (p1 + weight*p2) / (1+weight)
+
+    ### weighted linear combine ###
     return weight*p1 + (1-weight)*p2
+
 
 
 def ensemble_selection_obj(param, model1_pred, model2_pred, labels, num_valid_matrix):
@@ -202,7 +205,18 @@ def ensemble_selection():
 
     # sort the model by their cv mean score
     gini_cv = np.array(gini_cv)
-    sorted_model = gini_cv.argsort()[::-1]
+    sorted_model = gini_cv.argsort()[::-1] # large to small
+    id_accurate = 0
+    for i in range(len(sorted_model)):
+        mid = sorted_model[i]
+        if gini_cv[mid] < 0.35:
+            id_accurate = i
+            break
+    sorted_model = sorted_model[:id_accurate]
+    for mid in sorted_model:
+        print model_library[mid]
+    print len(sorted_model)
+
 
     # boosting ensemble
     # 1. initialization, use the max score model
@@ -292,7 +306,7 @@ def ensemble_selection():
                     best_gini, best_model, best_weight = np.mean(gini_cv_tmp), model, best_w
                 #### single process
 
-        if best_model == None:
+        if best_model == None or best_weight > 0.9:
             break
         print "Best for Iter %d, Gini %f, Model %s, Weight %f" %(ensemble_iter, best_gini, model_library[best_model], best_weight)
         best_weight_list.append(best_weight)
@@ -384,57 +398,90 @@ class EnsembleProcess(multiprocessing.Process):
             self.best_gini[0], self.best_model[0], self.best_weight[0] = np.mean(gini_cv_tmp), self.model, best_w
 
 
-# stacking
-def model_stacking():
-    # load data
-    train = pd.read_csv(config.origin_train_path, index_col=0)
-    test = pd.read_csv(config.origin_test_path, index_col=0)
+def ensemble_rank_average():
+    # load feat, labels and pred
+    feat_names = config.feat_names
+    model_list = config.model_list
 
-    x_label = train['Hazard'].values
-    x_label = stretch_lr(x_label)
-    y_len = len(list(test.index))
-
-
+    # load model library
     model_library = gen_model_library()
-    if model_library.count('label_xgb_art@24') > 0:
-        print 'label_xgb_art@24'
-    print len(model_library)
-    model_library = [ 'label_xgb_art@24' ]
-    print model_library
-    blend_train = np.zeros((len(x_label), len(model_library), config.kiter))
-    blend_test = np.zeros((y_len, len(model_library)))
+    model_num = len(model_library)
+    print model_num
 
-    # load kfold object
-    with open("%s/fold.pkl" % config.data_folder, 'rb') as i_f:
-        skf = pickle.load(i_f)
-    i_f.close()
+    # num valid matrix
+    num_valid_matrix = np.zeros((config.kiter, config.kfold), dtype=int)
 
+    # load valid labels
+    valid_labels = np.zeros((config.kiter, config.kfold, 50000), dtype=float)
     for iter in range(config.kiter):
-        for i in range(len(model_library)):
-            for j, (validInd, trainInd) in enumerate(skf[iter]):
-                path = "%s/iter%d/fold%d/%s.pred.pkl" %(config.data_folder, iter, j, model_library[i])
-                with open(path, 'rb') as f:
+        for fold in range(config.kfold):
+            path = "%s/iter%d/fold%d" % (config.data_folder, iter, fold)
+            label_file = "%s/valid.%s.feat.pkl" %(path, feat_names[0])
+            with open(label_file, 'rb') as f:
+                [x_val, y_true] = pickle.load(f)
+            valid_labels[iter, fold, :y_true.shape[0]] = y_true
+            num_valid_matrix[iter][fold] = y_true.shape[0]
+    maxNumValid = np.max(num_valid_matrix)
+    print "valid labels done!!!"
+
+    # load all predictions, cross validation
+    # compute model's gini cv score
+    gini_cv = []
+    model_valid_pred = np.zeros((model_num, config.kiter, config.kfold, maxNumValid), dtype=float)
+
+    for mid in range(model_num):
+        gini_cv_tmp = np.zeros((config.kiter, config.kfold), dtype=float)
+        for iter in range(config.kiter):
+            for fold in range(config.kfold):
+                path = "%s/iter%d/fold%d" % (config.data_folder, iter, fold)
+                pred_file = "%s/%s.pred.pkl" %(path, model_library[mid])
+                with open(pred_file, 'rb') as f:
                     y_pred = pickle.load(f)
-                f.close()
-                blend_train[validInd, i, iter] = y_pred
+                model_valid_pred[mid, iter, fold, :num_valid_matrix[iter, fold]] = y_pred
+                score = Gini(valid_labels[iter, fold, :num_valid_matrix[iter, fold]], y_pred)
+                gini_cv_tmp[iter][fold] = score
+        gini_cv.append(np.mean(gini_cv_tmp))
+    print "gini cv done!!!"
+
+    # sort the model by their cv mean score
+    gini_cv = np.array(gini_cv)
+    sorted_model = gini_cv.argsort()[::-1]
 
 
-    for i in range(len(model_library)):
-        path = "%s/all/%s.pred.pkl" %(config.data_folder, model_library[i])
+    ### rank average ###
+    best_model_end = 0
+    best_gini = 0
+    for model_end_id in range(len(sorted_model)):
+        gini_cv_tmp = np.zeros((config.kiter, config.kfold), dtype=float)
+        for iter in range(config.kiter):
+            for fold in range(config.kfold):
+                pred_tmp = np.zeros((num_valid_matrix[iter, fold]), dtype=float)
+                for mid in range(model_end_id+1):
+                    y_pred = model_valid_pred[sorted_model[mid], iter, fold, :num_valid_matrix[iter, fold]]
+                    #pred_tmp += y_pred.argsort() + 1
+                gini_cv_tmp[iter, fold] = Gini( valid_labels[iter, fold, :num_valid_matrix[iter, fold]], y_pred)
+        if np.mean(gini_cv_tmp) > best_gini:
+            best_model_end = model_end_id
+            best_gini = np.mean(gini_cv_tmp)
+        print "model end id %d, best_gini %f" %(model_end_id, best_gini)
+
+    print best_model_end
+    print best_gini
+
+    path = "%s/all/%s.pred.pkl" %(config.data_folder, model_library[ sorted_model[0] ])
+    with open(path, 'rb') as f:
+        y_pred = pickle.load(f)
+        y_pred = y_pred.argsort() + 1
+
+    for mid in range(best_model_end + 1):
+        path = "%s/all/%s.pred.pkl" %(config.data_folder, model_library[ sorted_model[mid] ])
         with open(path, 'rb') as f:
-            y_pred = pickle.load(f)
-        f.close()
-        blend_test[:, i] = y_pred
+            y_pred_tmp = pickle.load(f)
+        y_pred += y_pred_tmp.argsort() + 1
 
-    print "Blending..."
-    clf = LogisticRegression()
-    y_sub = np.zeros((y_len))
-    for iter in range(config.kiter):
-        clf.fit(blend_train[:, :, iter], x_label)
-        y_pred = clf.predict(blend_test)
-        y_sub += y_pred
-    y_sub = y_sub / config.kiter
-    gen_subm(y_sub, 'sub/model_stack.csv')
+    y_pred = y_pred * 1.0 / (best_model_end + 1)
+    gen_subm(y_pred, 'sub/model_rank_avg.csv')
+
     #TODO
 
 
@@ -448,8 +495,8 @@ if __name__ == "__main__":
         ensemble_selection()
     if flag == "submission":
         ensemble_prediction()
-    if flag == "stacking":
-        model_stacking()
+    if flag == "rankavg":
+        ensemble_rank_average()
 
     end_time = time.time()
     print "cost time %f" %( (end_time - start_time)/1000 )
