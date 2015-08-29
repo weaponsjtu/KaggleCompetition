@@ -209,7 +209,7 @@ def ensemble_selection():
     id_accurate = 0
     for i in range(len(sorted_model)):
         mid = sorted_model[i]
-        if gini_cv[mid] < 0.35:
+        if gini_cv[mid] < 0.2:
             id_accurate = i
             break
     sorted_model = sorted_model[:id_accurate]
@@ -252,7 +252,7 @@ def ensemble_selection():
             while model_id < len(sorted_model):
                 mp_list = []
                 for i in range(model_id, min(len(sorted_model), model_id + config.max_core)):
-                    mp = EnsembleProcess(ensemble_iter, i , model_library, sorted_model, model_pred_tmp, model_valid_pred, valid_labels, num_valid_matrix, best_gini_tmp, best_weight_tmp, best_model_tmp)
+                    mp = EnsembleProcess(ensemble_iter, sorted_model[i] , model_library, sorted_model, model_pred_tmp, model_valid_pred, valid_labels, num_valid_matrix, best_gini_tmp, best_weight_tmp, best_model_tmp)
                     mp_list.append(mp)
 
                 model_id += config.max_core
@@ -337,6 +337,10 @@ def ensemble_prediction():
     with open("%s/%s.pred.pkl" %(path, model_library[sorted_model[0]]), 'rb') as f:
         y_pred = pickle.load(f)
 
+    # generate best single model submission
+    gen_subm(y_pred, 'sub/best_single.csv')
+
+
     for i in range(len(best_model_list)):
         model = best_model_list[i]
         weight = best_weight_list[i]
@@ -345,7 +349,7 @@ def ensemble_prediction():
             y_pred_tmp = pickle.load(f)
         y_pred = ensemble_algorithm(y_pred, y_pred_tmp, weight)
 
-    # generate submission finally
+    # generate ensemble submission finally
     gen_subm(y_pred)
 
 class EnsembleProcess(multiprocessing.Process):

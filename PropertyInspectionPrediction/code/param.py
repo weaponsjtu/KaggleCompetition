@@ -26,7 +26,8 @@ class ParamConfig:
         self.origin_train_path = "../data/train.csv"
         self.origin_test_path = "../data/test.csv"
 
-        self.feat_names = ['standard', 'label', 'dictvec']
+        self.feat_names = ['standard', 'label', 'dictvec', 'onehot']
+        #self.feat_names = ['onehot']
 
         self.data_folder = data_folder
         if not os.path.exists(self.data_folder):
@@ -43,8 +44,9 @@ class ParamConfig:
                 if not os.path.exists(path):
                     os.makedirs(path)
 
-        #self.model_list = ['logistic', 'knn', 'ridge', 'lasso', 'xgb_rank', 'xgb_linear', 'xgb_tree', 'xgb_art', 'rf', 'gbf']
         self.model_list = ['xgb_fix', 'logistic', 'knn', 'ridge', 'lasso', 'xgb_rank', 'xgb_linear', 'xgb_tree', 'xgb_art', 'rf', 'gbf']
+        #self.model_list = ['xgb_fix', 'knn', 'rf']
+        #self.model_list = ['xgb_fix']
 
         self.update_model = ['']
         self.model_type = ''

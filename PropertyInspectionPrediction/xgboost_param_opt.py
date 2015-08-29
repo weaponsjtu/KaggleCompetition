@@ -42,7 +42,7 @@ def xgboost_pred(param, train,labels,test, weight):
     model = xgb.train(plst, xgtrain, num_rounds, watchlist, early_stopping_rounds=120)
     #model = xgb.train(plst, xgtrain, 800)
     pred1_val = model.predict(xgval,  ntree_limit=model.best_iteration)
-    print Gini(labels[:offset], pred1_val)
+    score1 = Gini(labels[:offset], pred1_val)
     #print Gini(labels, pred1_val)
     preds1 = model.predict(xgtest)
 
@@ -62,14 +62,16 @@ def xgboost_pred(param, train,labels,test, weight):
     model = xgb.train(plst, xgtrain, num_rounds, watchlist, early_stopping_rounds=120)
 #    model = xgb.train(plst, xgtrain, 800)
     pred2_val = model.predict(xgval, ntree_limit=model.best_iteration)
-    print Gini(labels[:offset], pred2_val)
+    score2 = Gini(labels[:offset], pred2_val)
     #print Gini(labels, pred2_val)
     preds2 = model.predict(xgtest)
 
 
     #combine predictions
     #since the metric only cares about relative rank we don"t need to average
-    preds = preds1*weight + preds2*(1-weight)
+    preds = preds1*weight+ preds2*(1-weight)
+    #preds = preds1 * preds2
+    print (score1 + score2)/2
     return preds
 
 # test has labels value
@@ -115,7 +117,7 @@ def extract_feature(train_tmp, test_tmp):
     test_s = test_s.astype(float)
 
 
-    train_s, test_s = add_features(train_s, test_s)
+    #train_s, test_s = add_features(train_s, test_s)
 
     #model_2 building
 
@@ -126,7 +128,7 @@ def extract_feature(train_tmp, test_tmp):
     train = vec.fit_transform(train)
     test = vec.transform(test)
 
-    train, test_s = add_features(train, test)
+    #train, test_s = add_features(train, test)
     return [train_s, test_s, train, test, labels, y_true]
 
 
@@ -134,8 +136,9 @@ def ensemble_obj(param, train_s, test_s, train, test, labels, y_true):
     preds1 = xgboost_pred(param, train_s,labels,test_s, param['weight_inter'])
     preds2 = xgboost_pred(param, train,labels,test, param['weight_inter'])
 
-    weight = param['weight']
-    preds = weight * (preds1**param['pow_weight']) + (1-weight) * (preds2**param['pow_weight'])
+    #weight = param['weight']
+    #preds = weight * (preds1**param['pow_weight']) + (1-weight) * (preds2**param['pow_weight'])
+    preds = preds1 * preds2 / (preds1 + preds2)
 
     score = Gini(y_true, preds)
     writer.writerow( [score] + list(param.values()) )
@@ -206,9 +209,9 @@ if __name__ == '__main__':
 
     param = {
         #'offset': pyll.scope.int(hp.quniform('offset', 4000, 10000, 1000)),
-        'weight': hp.quniform('weight', 0.45, 0.5, 0.001),
+        #'weight': hp.quniform('weight', 0.45, 0.5, 0.001),
         'weight_inter': hp.quniform('weight_inter', 1.4, 1.7, 0.01),
-        'pow_weight': hp.quniform('pow_weight', 0, 1, 0.01),
+        #'pow_weight': hp.quniform('pow_weight', 0, 1, 0.01),
         #'pow_weight2': hp.quniform('pow_weight2', 0, 1, 0.01),
         #'early_stopping_rounds': pyll.scope.int(hp.quniform('early_stopping_rounds', 50, 150, 10)),
         #'objective': 'reg:linear',

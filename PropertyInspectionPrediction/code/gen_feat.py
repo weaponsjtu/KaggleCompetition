@@ -17,6 +17,30 @@ def extract_feature(path, train, test, type, feat_names):
         y_test = test['Hazard'].values
         test.drop("Hazard", axis=1, inplace=True)
 
+    if feat_names.count("onehot") > 0:
+        feat = "onehot"
+        train_s = train.copy()
+        test_s = test.copy()
+        train_s = np.array(train_s)
+        test_s = np.array(test_s)
+
+        for i in range(train_s.shape[1]):
+            lbl = preprocessing.LabelEncoder()
+            lbl.fit(list(train_s[:, i]) + list(test_s[:, i]))
+            train_s[:, i] = lbl.transform(train_s[:, i])
+            test_s[:, i] = lbl.transform(test_s[:, i])
+
+        all_data = np.concatenate((train_s, test_s), axis=0)
+        hot = preprocessing.OneHotEncoder()
+        hot.fit(all_data)
+        train_s = hot.transform(train_s)
+        test_s = hot.transform(test_s)
+
+        with open("%s/train.%s.feat.pkl" %(path, feat), "wb") as f:
+            pickle.dump([train_s, y_train], f, -1)
+        with open("%s/%s.%s.feat.pkl" %(path, type, feat), "wb") as f:
+            pickle.dump([test_s, y_test], f, -1)
+
 
     if feat_names.count("label") > 0:
         feat = "label"
@@ -117,7 +141,7 @@ if __name__ == "__main__":
     # for cross validation
     print "Extract feature for cross validation"
     for iter in range(config.kiter):
-        for fold, (validInd, trainInd) in enumerate(skf[iter]):
+        for fold, (trainInd, validInd) in enumerate(skf[iter]):
             path = "%s/iter%d/fold%d" %(config.data_folder, iter, fold)
             sub_train = train.iloc[trainInd].copy()
             sub_val = train.iloc[validInd].copy()

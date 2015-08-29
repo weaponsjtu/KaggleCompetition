@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import cPickle as pickle
-import os
+import os, sys
 
 from param import config
 
@@ -28,6 +28,11 @@ def Gini(y_true, y_pred):
     # normalize to true Gini coefficient
     #print "pred gini is %f, true gini is %f" %(G_pred, G_true)
     return G_pred/G_true
+
+def gini_metric(y_pred, dtrain):
+    labels = dtrain.get_label()
+    gini = Gini(labels, y_pred)
+    return 'gini', float(gini)
 
 def stretch_lr(y_pred):
     y_pred = np.array(y_pred)
@@ -140,7 +145,48 @@ def change_name():
                 if os.path.exists(pred_file):
                     os.rename(pred_file, "%s/%s_%s@%d.pred.pkl" %(path, feat, model, num))
 
+def test():
+    y_true = np.array([1,2,3,4,5,6,7,8])
+    pred1 = np.array([3.4, 5.6, 3.2, 4.5, 8.0, 3, 2.0, 5.4])
+    pred2 = np.array([2,4,8,6,10,12,14,16])
+    print Gini(y_true, pred2)
+    print Gini(y_true, pred2.argsort())
+
+def model_relation(filename1, filename2):
+    data1 = pd.read_csv(filename1, header=0)
+    data2 = pd.read_csv(filename2, header=0)
+
+    pred1 = data1['Hazard'].values
+    pred2 = data2['Hazard'].values
+
+    print "Gini score is %f" %Gini(pred1, pred2)
+    print "Inverse, Gini score is %f" %Gini(pred2, pred1)
+
+def check_better(filename):
+    data = pd.read_csv(filename, header=0)
+    pred = data['Hazard'].values
+
+    LB = [0.391206, 0.391175, 0.391161, 0.391131, 0.391122, 0.383670, 0.381138, 0.328270]
+
+    path = "../output/high"
+    gini = []
+    for i in range(1,9):
+        data = pd.read_csv("%s/xgb_%d.csv" %(path, i), header=0)
+        gini.append( [Gini(data['Hazard'].values, pred), LB[i-1]] )
+
+    print gini
+    for i in range(len(gini) - 1):
+        if gini[i] < gini[i+1]:
+            print "### reason is %d" %i
+            return False
+    return True
+
+
+
 if __name__ == '__main__':
-    show_best_params()
+    #show_best_params()
     #change_name()
     #append_best_params()
+    #model_relation(sys.argv[1], sys.argv[2])
+    #test()
+    print check_better(sys.argv[1])

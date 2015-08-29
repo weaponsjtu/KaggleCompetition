@@ -546,6 +546,9 @@ def hyperopt_library(model_type, model_param, x_train, y_train, x_test, y_test):
             params = model_param
             num_rounds = model_param['num_rounds']
             offset = int(model_param['valid_size'] * y_train.shape[0]) + 1
+            if type(x_train) != np.ndarray:
+                x_train = x_train.toarray()
+                x_test = x_test.toarray()
             xgtrain = xgb.DMatrix(x_train[offset:, :], label=y_train[offset:])
             xgval = xgb.DMatrix(x_train[:offset, :], label=y_train[:offset])
             watchlist = [(xgtrain, "train"), (xgval, "val")]

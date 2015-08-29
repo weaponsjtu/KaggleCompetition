@@ -74,7 +74,6 @@ def xgboost_pred(train,labels,test):
     #combine predictions
     #since the metric only cares about relative rank we don"t need to average
     preds = (preds1)*1.5 + (preds2)*8.5
-    #preds = preds1*weight + preds2*(1-weight)
     #preds = preds1*preds2
     print 'Gini Score is ', (score1+score2)/2
     return preds
@@ -98,10 +97,18 @@ def main(flag):
     train_s.drop("T1_V13", axis=1, inplace=True)
     train_s.drop("T1_V10", axis=1, inplace=True)
 
+    #train_s.drop("T1_V17", axis=1, inplace=True)
+    #train_s.drop("T1_V17", axis=1, inplace=True)
+    #train_s.drop("T2_V8", axis=1, inplace=True)
+
     test_s.drop("T2_V10", axis=1, inplace=True)
     test_s.drop("T2_V7", axis=1, inplace=True)
     test_s.drop("T1_V13", axis=1, inplace=True)
     test_s.drop("T1_V10", axis=1, inplace=True)
+
+    #test_s.drop("T1_V17", axis=1, inplace=True)
+    #test_s.drop("T1_V17", axis=1, inplace=True)
+    #test_s.drop("T2_V8", axis=1, inplace=True)
 
 
     train_s = np.array(train_s)
@@ -117,7 +124,7 @@ def main(flag):
     train_s = train_s.astype(float)
     test_s = test_s.astype(float)
 
-    #train_s, test_s = add_features(train_s, test_s)
+    train_s, test_s = add_features(train_s, test_s)
     preds1 = xgboost_pred(train_s,labels,test_s)
 
     #model_2 building
@@ -130,11 +137,12 @@ def main(flag):
     test = vec.transform(test)
 
 
-    #train, test = add_features(train, test)
+    train, test = add_features(train, test)
     preds2 = xgboost_pred(train,labels,test)
 
-    preds = 0.463 * (preds1**0.01) + 0.537 * (preds2**0.01)
+    #preds = 0.463 * (preds1**0.01) + 0.537 * (preds2**0.01)
     #preds = preds1*preds2
+    preds = preds1*preds2 / (preds1 + preds2)
 
     if flag:
         exit(0)
@@ -142,7 +150,7 @@ def main(flag):
     #generate solution
     preds = pd.DataFrame({"Id": test_ind, "Hazard": preds})
     preds = preds.set_index("Id")
-    preds.to_csv("xgb_art.csv")
+    preds.to_csv("xgb_last.csv")
 
 from sklearn.decomposition import PCA
 def pca_wrapper(array):
